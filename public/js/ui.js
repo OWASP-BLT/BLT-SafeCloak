@@ -98,3 +98,41 @@ function formatDateShort(ts) {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   return d.toLocaleDateString();
 }
+
+/* ── Last updated footer info ── */
+async function loadLastUpdated() {
+  const el = document.getElementById('last-updated-info');
+  if (!el) return;
+
+  const CACHE_KEY = 'blt_last_commit';
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  try {
+    let data;
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { ts, payload } = JSON.parse(cached);
+      if (Date.now() - ts < CACHE_TTL) {
+        data = payload;
+      }
+    }
+    if (!data) {
+      const res = await fetch('https://api.github.com/repos/OWASP-BLT/BLT-SafeCloak/commits/main', {
+        headers: { Accept: 'application/vnd.github.v3+json' }
+      });
+      if (!res.ok) return;
+      data = await res.json();
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), payload: data }));
+    }
+    const sha = data.sha;
+    const date = data.commit && data.commit.committer && data.commit.committer.date;
+    if (!sha || !date) return;
+    const shortSha = sha.slice(0, 7);
+    const timeAgo = formatDateShort(new Date(date));
+    el.innerHTML = `updated ${timeAgo} <a href="https://github.com/OWASP-BLT/BLT-SafeCloak/commit/${sha}" target="_blank" rel="noopener" class="text-red-600 hover:underline font-mono">${shortSha}</a>`;
+  } catch {
+    // silently ignore network or storage errors
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadLastUpdated);
