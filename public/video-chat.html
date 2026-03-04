@@ -255,6 +255,59 @@
               <i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>
               View Consent Log
             </a>
+            <a
+              href="https://meet.google.com/new"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-secondary"
+              aria-label="Open a new Google Meet session"
+            >
+              <svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 48 48" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <title>Google Meet</title>
+                <path d="M27.5 24l8.5 6.5V17.5L27.5 24z" fill="#00832d"/>
+                <path d="M4 31.5V37a3 3 0 003 3h5.5l1-4.5-1-4H7a3 3 0 00-3 3z" fill="#0066da"/>
+                <path d="M12.5 8H7a3 3 0 00-3 3v5.5h8.5V8z" fill="#e94235"/>
+                <path d="M12.5 16.5H4v15h8.5v-15z" fill="#2684fc"/>
+                <path d="M12.5 8l-4 8.5h19L36 8H12.5z" fill="#00ac47"/>
+                <path d="M36 8h-8.5v9.5L36 24v-8.5A7.5 7.5 0 0036 8z" fill="#00832d"/>
+                <path d="M36 24l-8.5 7H12.5v9H36a7.5 7.5 0 007.5-7.5V17.5L36 24z" fill="#00ac47"/>
+                <path d="M27.5 31.5h-15v9h15v-9z" fill="#0066da"/>
+              </svg>
+              Use with Google Meet
+            </a>
+            <button
+              type="button"
+              id="btn-no-recording-consent"
+              class="btn btn-secondary text-left"
+              aria-label="Announce non-consent to recording"
+            >
+              <i class="fa-solid fa-ban text-primary" aria-hidden="true"></i>
+              No Recording Consent
+            </button>
+          </div>
+
+          <!-- No-recording consent notice -->
+          <div
+            id="no-recording-notice"
+            style="display:none"
+            class="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-gray-800"
+            role="alert"
+            aria-live="assertive"
+          >
+            <p class="font-bold text-red-700 mb-2">
+              <i class="fa-solid fa-ban mr-1" aria-hidden="true"></i>
+              Non-Consent to Recording
+            </p>
+            <p id="no-recording-message">Please note that a caller in this conversation does not consent to being recorded, please confirm that this call is not being recorded.</p>
+            <button
+              type="button"
+              id="btn-copy-no-recording"
+              class="btn btn-secondary mt-3 w-full text-xs"
+              aria-label="Copy non-consent message to clipboard"
+            >
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+              Copy Message
+            </button>
           </div>
         </aside>
       </div>
@@ -283,6 +336,27 @@
         setTimeout(() => {
           alert.style.display = "none";
         }, 5000);
+      }
+
+      const btnNoRecording = document.getElementById("btn-no-recording-consent");
+      const noRecordingNotice = document.getElementById("no-recording-notice");
+      const btnCopyNoRecording = document.getElementById("btn-copy-no-recording");
+      const noRecordingMessage = document.getElementById("no-recording-message");
+
+      if (btnNoRecording && noRecordingNotice) {
+        btnNoRecording.addEventListener("click", () => {
+          const isVisible = noRecordingNotice.style.display !== "none";
+          noRecordingNotice.style.display = isVisible ? "none" : "block";
+          if (!isVisible) {
+            noRecordingNotice.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        });
+      }
+
+      if (btnCopyNoRecording && noRecordingMessage) {
+        btnCopyNoRecording.addEventListener("click", () => {
+          copyToClipboard(noRecordingMessage.textContent.trim(), "Non-consent message");
+        });
       }
     });
 
