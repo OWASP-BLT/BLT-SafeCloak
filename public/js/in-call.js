@@ -172,7 +172,7 @@ const VideoChat = (() => {
             const remote = params.get('room');
             if (remote) {
                 // fill input for visibility
-                const input = $('remote-id');
+                const input = $('join-id');
                 if (input) input.value = remote;
                 callPeer(remote);
             }

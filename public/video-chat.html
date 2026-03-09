@@ -133,7 +133,7 @@
         
         <div class="flex gap-2">
           <input type="text" id="join-id" placeholder="ENTER ROOM ID..." class="w-full rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium tracking-wider outline-none ring-1 ring-gray-100 focus:ring-2 focus:ring-red-500/20" />
-          <button id="btn-join" onclick="VideoChat.callPeer(document.getElementById('remote-id').value.trim())" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
+          <button id="btn-join" onclick="VideoChat.callPeer(document.getElementById('join-id').value.trim())" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
             Join
           </button>
         </div>
