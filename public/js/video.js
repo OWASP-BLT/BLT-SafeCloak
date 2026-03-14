@@ -14,6 +14,9 @@ const VideoChat = (() => {
   let camOff = true;
   let consentGiven = false;
   let screenSharing = false;
+  let deniedTimeout = null;
+  let hasRealAudioTrack = false;
+  let hasRealVideoTrack = false;
 
   const state = {
     peerId: null,
@@ -89,10 +92,16 @@ const VideoChat = (() => {
     const mainGrid = $('main-grid');
     const permAlert = $('perm-alert');
     if (instructions) instructions.innerHTML = getCameraInstructions(detectBrowser());
+    
+    if (deniedTimeout) {
+      clearTimeout(deniedTimeout);
+      deniedTimeout = null;
+    }
+
     if (denied) {
       denied.style.display = 'flex';
       // Auto-hide the banner after 8 seconds
-      setTimeout(() => {
+      deniedTimeout = setTimeout(() => {
         denied.style.display = 'none';
         if (permAlert) permAlert.style.display = 'block';
       }, 8000);
@@ -100,10 +109,17 @@ const VideoChat = (() => {
     
     if (permAlert) permAlert.style.display = 'none';
     const retryBtn = $('btn-camera-retry');
-    if (retryBtn) retryBtn.addEventListener('click', () => {
-      denied.style.display = 'none';
-      if (permAlert) permAlert.style.display = 'block';
-    });
+    if (retryBtn) {
+      retryBtn.onclick = () => {
+        if (deniedTimeout) {
+          clearTimeout(deniedTimeout);
+          deniedTimeout = null;
+        }
+        denied.style.display = 'none';
+        if (permAlert) permAlert.style.display = 'block';
+        toggleCamera(); // Retry media acquisition
+      };
+    }
   }
 
   /* ── Media ── */
@@ -217,9 +233,45 @@ const VideoChat = (() => {
   function handleCallStream(call) {
     call.on('stream', remoteStream => {
       const remoteVideo = $('remote-video');
-      if (remoteVideo) { remoteVideo.srcObject = remoteStream; }
       const remotePlaceholder = $('remote-placeholder');
-      if (remotePlaceholder) remotePlaceholder.classList.add('hidden');
+      
+      if (remoteVideo) { remoteVideo.srcObject = remoteStream; }
+      
+      // Helper function to check track status
+      const checkRemoteVideoState = () => {
+        if (!remotePlaceholder) return;
+        const videoTracks = remoteStream.getVideoTracks();
+        // Check if there's at least one active (not stopped) and enabled track
+        // Also check if it's the 1 FPS dummy track (by checking width/height or just enabled state)
+        const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && track.enabled);
+        
+        if (hasActiveVideo) {
+          remotePlaceholder.classList.add('hidden');
+        } else {
+          remotePlaceholder.classList.remove('hidden');
+        }
+      };
+
+      // Initial check
+      checkRemoteVideoState();
+
+      // Listen for remote track changes (when they toggle during a call)
+      remoteStream.getTracks().forEach(track => {
+        track.onmute = checkRemoteVideoState;
+        track.onunmute = checkRemoteVideoState;
+        // Some browsers fire 'ended' when the track is replaced/stopped
+        track.onended = checkRemoteVideoState; 
+      });
+
+      // Listen for track additions/removals
+      remoteStream.onaddtrack = (e) => {
+        e.track.onmute = checkRemoteVideoState;
+        e.track.onunmute = checkRemoteVideoState;
+        e.track.onended = checkRemoteVideoState;
+        checkRemoteVideoState();
+      };
+      remoteStream.onremovetrack = checkRemoteVideoState;
+
       state.connected = true;
       updateStatus('🔒 Encrypted call active', 'success');
       setDotStatus('online');
@@ -262,39 +314,48 @@ const VideoChat = (() => {
   async function toggleMic() {
     if (!localStream) return;
     
-    // If mic is currently muted (or using dummy track), we want to turn it ON
+    // If mic is currently muted, we want to turn it ON
     if (micMuted) {
-      try {
-        const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const realAudioTrack = realAudioStream.getAudioTracks()[0];
-        
-        // Remove old track and add new real track to localStream
-        const oldAudioTrack = localStream.getAudioTracks()[0];
-        if (oldAudioTrack) {
-           localStream.removeTrack(oldAudioTrack);
-           oldAudioTrack.stop();
+      if (!hasRealAudioTrack) {
+        // First time unmuting - need to request actual permission
+        try {
+          const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const realAudioTrack = realAudioStream.getAudioTracks()[0];
+          
+          // Remove dummy track and add new real track to localStream
+          const oldAudioTrack = localStream.getAudioTracks()[0];
+          if (oldAudioTrack) {
+             localStream.removeTrack(oldAudioTrack);
+             oldAudioTrack.stop();
+          }
+          localStream.addTrack(realAudioTrack);
+          
+          // Update peer connection senders if in a call
+          if (currentCall && currentCall.peerConnection) {
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+            if (sender) sender.replaceTrack(realAudioTrack);
+          }
+          
+          startVoiceMeter(localStream);
+          hasRealAudioTrack = true;
+          micMuted = false;
+          showToast('Microphone enabled', 'success');
+        } catch (err) {
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+               showToast('Microphone access denied', 'warning');
+          } else {
+               showToast('Microphone error: ' + err.message, 'error');
+          }
+          return;
         }
-        localStream.addTrack(realAudioTrack);
-        
-        // Update peer connection senders if in a call
-        if (currentCall && currentCall.peerConnection) {
-          const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
-          if (sender) sender.replaceTrack(realAudioTrack);
-        }
-        
-        startVoiceMeter(localStream);
+      } else {
+        // Already have a real track, just enable it
+        localStream.getAudioTracks().forEach(t => (t.enabled = true));
         micMuted = false;
-        showToast('Microphone enabled', 'success');
-      } catch (err) {
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
-             showToast('Microphone access denied', 'warning');
-        } else {
-             showToast('Microphone error: ' + err.message, 'error');
-        }
-        return;
+        showToast('Microphone unmuted', 'success');
       }
     } else {
-      // Turn mic OFF (mute the existing real track)
+      // Turn mic OFF (mute the existing real track, do not stop it)
       micMuted = true;
       localStream.getAudioTracks().forEach(t => (t.enabled = false));
       showToast('Microphone muted', 'info');
@@ -311,41 +372,52 @@ const VideoChat = (() => {
   async function toggleCamera() {
     if (!localStream) return;
     
-    // If cam is currently off (or using dummy track), we want to turn it ON
+    // If cam is currently off, we want to turn it ON
     if (camOff) {
-      try {
-         const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-         const realVideoTrack = realVideoStream.getVideoTracks()[0];
-         
-         // Remove old track and add new real track to localStream
-         const oldVideoTrack = localStream.getVideoTracks()[0];
-         if (oldVideoTrack) {
-            localStream.removeTrack(oldVideoTrack);
-            oldVideoTrack.stop();
-         }
-         localStream.addTrack(realVideoTrack);
-         
-         // Update peer connection senders if in a call
-         if (currentCall && currentCall.peerConnection) {
-            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender) sender.replaceTrack(realVideoTrack);
-         }
-         
-         const localPlaceholder = $('local-placeholder');
-         if (localPlaceholder) localPlaceholder.classList.add('hidden');
-         
-         camOff = false;
-         showToast('Camera enabled', 'success');
-      } catch (err) {
-         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
-             showCameraDenied();
-         } else {
-             showToast('Camera error: ' + err.message, 'error');
-         }
-         return;
+      if (!hasRealVideoTrack) {
+        // First time enabling camera - need to request actual permission
+        try {
+           const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+           const realVideoTrack = realVideoStream.getVideoTracks()[0];
+           
+           // Remove dummy track and add new real track to localStream
+           const oldVideoTrack = localStream.getVideoTracks()[0];
+           if (oldVideoTrack) {
+              localStream.removeTrack(oldVideoTrack);
+              oldVideoTrack.stop();
+           }
+           localStream.addTrack(realVideoTrack);
+           
+           // Update peer connection senders if in a call
+           if (currentCall && currentCall.peerConnection) {
+              const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+              if (sender) sender.replaceTrack(realVideoTrack);
+           }
+           
+           const localPlaceholder = $('local-placeholder');
+           if (localPlaceholder) localPlaceholder.classList.add('hidden');
+           
+           hasRealVideoTrack = true;
+           camOff = false;
+           showToast('Camera enabled', 'success');
+        } catch (err) {
+           if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+               showCameraDenied();
+           } else {
+               showToast('Camera error: ' + err.message, 'error');
+           }
+           return;
+        }
+      } else {
+        // Already have a real track, just enable it
+        localStream.getVideoTracks().forEach(t => (t.enabled = true));
+        camOff = false;
+        const localPlaceholder = $('local-placeholder');
+        if (localPlaceholder) localPlaceholder.classList.add('hidden');
+        showToast('Camera enabled', 'success');
       }
     } else {
-      // Turn cam OFF
+      // Turn cam OFF (disable track, do not stop it)
       camOff = true;
       localStream.getVideoTracks().forEach(t => (t.enabled = false));
       const localPlaceholder = $('local-placeholder');
@@ -416,7 +488,7 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="bg-white rounded-xl p-6 shadow-2xl max-w-md w-full border border-neutral-border">
           <h3 class="text-xl font-extrabold text-gray-900 mb-2">🔒 Recording Consent Required</h3>
-          <p class="text-gray-600 mb-4 text-sm leading-relaxed">This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong class="text-gray-900 font-bold">${callerName}</strong>?</p>
+          <p class="text-gray-600 mb-4 text-sm leading-relaxed">This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong class="text-gray-900 font-bold" id="consent-caller-name"></strong>?</p>
           <div class="alert alert-info mb-5">
             <i class="fa-solid fa-circle-info mt-0.5"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
@@ -428,6 +500,9 @@ const VideoChat = (() => {
         </div>
       `;
       document.body.appendChild(overlay);
+      
+      const callerNameEl = overlay.querySelector('#consent-caller-name');
+      if (callerNameEl) callerNameEl.textContent = callerName;
 
       overlay.querySelector('#consent-allow').onclick = () => {
         consentGiven = true;

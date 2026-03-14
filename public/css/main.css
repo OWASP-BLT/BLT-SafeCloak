@@ -178,6 +178,11 @@ body {
     font-size: 4rem;
     z-index: 10;
 }
+
+.video-label {
+    z-index: 11;
+}
+
 .video-placeholder.hidden {
     display: none;
 }
