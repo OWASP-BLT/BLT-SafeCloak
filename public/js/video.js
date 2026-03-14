@@ -297,9 +297,15 @@ const VideoChat = (() => {
     });
     conn.on('close', () => {
       dataConn = null;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      updateRemoteVideoState();
     });
     conn.on('error', () => {
       dataConn = null;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      updateRemoteVideoState();
     });
   }
 
@@ -414,10 +420,11 @@ const VideoChat = (() => {
     if (micMuted) {
       if (!hasRealAudioTrack) {
         micToggleInFlight = true;
+        let realAudioTrack = null;
         // First time unmuting - need to request actual permission
         try {
           const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const realAudioTrack = realAudioStream.getAudioTracks()[0];
+          realAudioTrack = realAudioStream.getAudioTracks()[0];
           
           const oldAudioTrack = localStream.getAudioTracks()[0];
           // Update peer connection sender first
@@ -477,10 +484,11 @@ const VideoChat = (() => {
     if (camOff) {
       if (!hasRealVideoTrack) {
         camToggleInFlight = true;
+        let realVideoTrack = null;
         // First time enabling camera - need to request actual permission
         try {
            const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-           const realVideoTrack = realVideoStream.getVideoTracks()[0];
+           realVideoTrack = realVideoStream.getVideoTracks()[0];
            
            // Remove dummy track and add new real track to localStream
            const oldVideoTrack = localStream.getVideoTracks()[0];
