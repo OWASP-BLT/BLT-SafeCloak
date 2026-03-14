@@ -22,6 +22,8 @@ const VideoChat = (() => {
   let remoteVideoEnabled = null;
   let micToggleInFlight = false;
   let camToggleInFlight = false;
+  let shareScreenInFlight = false;
+  let activeScreenTrack = null;
   let pendingDataConn = null;
   let deniedTimeout = null;
 
@@ -231,7 +233,14 @@ const VideoChat = (() => {
     peer.on('call', async incomingCall => {
       if (!consentGiven) {
         const ok = await askConsent(incomingCall.peer);
-        if (!ok) { incomingCall.close(); return; }
+        if (!ok) { 
+          incomingCall.close(); 
+          if (pendingDataConn && pendingDataConn.peer === incomingCall.peer) {
+            pendingDataConn.close();
+            pendingDataConn = null;
+          }
+          return; 
+        }
       }
       currentCall = incomingCall;
       remoteVideoSource = null;
@@ -611,12 +620,14 @@ const VideoChat = (() => {
 
   /* ── Screen share ── */
   async function shareScreen() {
+    if (screenSharing || shareScreenInFlight) return;
+    shareScreenInFlight = true;
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
+      activeScreenTrack = screenStream.getVideoTracks()[0];
       if (currentCall && currentCall.peerConnection) {
         const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) await sender.replaceTrack(screenTrack);
+        if (sender) await sender.replaceTrack(activeScreenTrack);
       }
       const localVideo = $('local-video');
       if (localVideo) localVideo.srcObject = screenStream;
@@ -624,20 +635,28 @@ const VideoChat = (() => {
       screenSharing = true;
       if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'screen', enabled: true }); }
       $('btn-screen') && $('btn-screen').classList.add('active');
-      screenTrack.onended = () => {
+      activeScreenTrack.onended = () => {
         if (screenSharing) stopScreenShare();
       };
     } catch (err) {
       if (err.name !== 'NotAllowedError') showToast('Screen share error: ' + err.message, 'error');
     }
+    shareScreenInFlight = false;
   }
 
   function stopScreenShare() {
-    if (!localStream || !currentCall) return;
+    if (!localStream) return;
+    
+    if (activeScreenTrack) {
+       activeScreenTrack.stop(); // Tell browser to stop recording the screen!
+       activeScreenTrack = null;
+    }
+    
     const videoTrack = localStream.getVideoTracks()[0];
-    if (!videoTrack) return;
-    const sender = currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-    if (sender) sender.replaceTrack(videoTrack);
+    if (videoTrack) {
+       const sender = currentCall && currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+       if (sender) sender.replaceTrack(videoTrack);
+    }
     const localVideo = $('local-video');
     if (localVideo) { localVideo.srcObject = localStream; }
     $('btn-screen') && $('btn-screen').classList.remove('active');
