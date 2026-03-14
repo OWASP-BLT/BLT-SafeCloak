@@ -220,6 +220,16 @@ const VideoChat = (() => {
     peer.on('connection', conn => {
       // Reject unsolicited connections or buffer them if currentCall is pending
       if (!currentCall) {
+        if (!pendingDataConn) {
+          pendingDataConn = conn;
+          return;
+        }
+        // Keep one pending connection until consent/call resolution.
+        if (pendingDataConn.peer !== conn.peer) {
+          conn.close();
+          return;
+        }
+        pendingDataConn.close();
         pendingDataConn = conn;
         return;
       }
@@ -409,25 +419,27 @@ const VideoChat = (() => {
           const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           const realAudioTrack = realAudioStream.getAudioTracks()[0];
           
-          // Remove dummy track and add new real track to localStream
           const oldAudioTrack = localStream.getAudioTracks()[0];
-          if (oldAudioTrack) {
-             localStream.removeTrack(oldAudioTrack);
-             oldAudioTrack.stop();
-          }
-          localStream.addTrack(realAudioTrack);
-          
-          // Update peer connection senders if in a call
+          // Update peer connection sender first
           if (currentCall && currentCall.peerConnection) {
             const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
             if (sender) await sender.replaceTrack(realAudioTrack);
           }
+
+          // Commit local stream swap only after successful sender update
+          if (oldAudioTrack) {
+            localStream.removeTrack(oldAudioTrack);
+            oldAudioTrack.stop();
+          }
+          localStream.addTrack(realAudioTrack);
           
           startVoiceMeter(localStream);
           hasRealAudioTrack = true;
           micMuted = false;
           showToast('Microphone enabled', 'success');
         } catch (err) {
+          // Roll back newly acquired track when first-enable fails
+          if (realAudioTrack) realAudioTrack.stop();
           if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
                showToast('Microphone access denied', 'warning');
           } else {
@@ -492,6 +504,8 @@ const VideoChat = (() => {
            if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: true }); }
            showToast('Camera enabled', 'success');
         } catch (err) {
+           // Roll back newly acquired track when first-enable fails
+           if (realVideoTrack) realVideoTrack.stop();
            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
                showCameraDenied();
            } else {
@@ -529,6 +543,16 @@ const VideoChat = (() => {
   }
 
   function endCall() {
+    if (activeScreenTrack) {
+      activeScreenTrack.onended = null;
+      activeScreenTrack.stop();
+      activeScreenTrack = null;
+    }
+    screenSharing = false;
+    $('btn-screen') && $('btn-screen').classList.remove('active');
+    const localVideo = $('local-video');
+    if (localVideo && localStream) localVideo.srcObject = localStream;
+    
     if (currentCall) { currentCall.close(); currentCall = null; }
     if (dataConn) { dataConn.close(); dataConn = null; }
     state.connected = false;
@@ -636,7 +660,7 @@ const VideoChat = (() => {
       if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'screen', enabled: true }); }
       $('btn-screen') && $('btn-screen').classList.add('active');
       activeScreenTrack.onended = () => {
-        if (screenSharing) stopScreenShare();
+        if (screenSharing) void stopScreenShare();
       };
     } catch (err) {
       if (err.name !== 'NotAllowedError') showToast('Screen share error: ' + err.message, 'error');
@@ -644,7 +668,7 @@ const VideoChat = (() => {
     shareScreenInFlight = false;
   }
 
-  function stopScreenShare() {
+  async function stopScreenShare() {
     if (!localStream) return;
     
     if (activeScreenTrack) {
@@ -654,8 +678,14 @@ const VideoChat = (() => {
     
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
-       const sender = currentCall && currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-       if (sender) sender.replaceTrack(videoTrack);
+      const sender = currentCall && currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        try {
+          await sender.replaceTrack(videoTrack);
+        } catch (err) {
+          showToast('Failed to restore camera after screen share: ' + err.message, 'error');
+        }
+      }
     }
     const localVideo = $('local-video');
     if (localVideo) { localVideo.srcObject = localStream; }
