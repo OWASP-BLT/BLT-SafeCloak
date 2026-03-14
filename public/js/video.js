@@ -18,9 +18,12 @@ const VideoChat = (() => {
   let hasRealAudioTrack = false;
   let hasRealVideoTrack = false;
   let dataConn = null;
-  let remoteCameraOn = null;
+  let remoteVideoSource = null;
+  let remoteVideoEnabled = null;
   let micToggleInFlight = false;
   let camToggleInFlight = false;
+  let pendingDataConn = null;
+  let deniedTimeout = null;
 
   const state = {
     peerId: null,
@@ -213,8 +216,12 @@ const VideoChat = (() => {
     });
 
     peer.on('connection', conn => {
-      // Reject unsolicited connections
-      if (!currentCall || conn.peer !== currentCall.peer) {
+      // Reject unsolicited connections or buffer them if currentCall is pending
+      if (!currentCall) {
+        pendingDataConn = conn;
+        return;
+      }
+      if (conn.peer !== currentCall.peer) {
         conn.close();
         return;
       }
@@ -227,7 +234,19 @@ const VideoChat = (() => {
         if (!ok) { incomingCall.close(); return; }
       }
       currentCall = incomingCall;
-      remoteCameraOn = null;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      
+      // Check for buffered data connection
+      if (pendingDataConn) {
+        if (pendingDataConn.peer === currentCall.peer) {
+          setupDataConn(pendingDataConn);
+        } else {
+          pendingDataConn.close();
+        }
+        pendingDataConn = null;
+      }
+      
       incomingCall.answer(localStream);
       handleCallStream(incomingCall);
     });
@@ -248,11 +267,12 @@ const VideoChat = (() => {
     dataConn = conn;
     conn.on('open', () => {
       // Send our current camera state
-      conn.send({ type: 'camera_state', enabled: !camOff });
+      conn.send({ type: 'video_state', source: screenSharing ? 'screen' : 'camera', enabled: screenSharing ? true : !camOff });
     });
     conn.on('data', data => {
-      if (data && data.type === 'camera_state') {
-        remoteCameraOn = data.enabled;
+      if (data && data.type === 'video_state') {
+        remoteVideoSource = data.source;
+        remoteVideoEnabled = data.enabled;
         updateRemoteVideoState();
       }
     });
@@ -271,11 +291,12 @@ const VideoChat = (() => {
     const remoteStream = remoteVideo.srcObject;
 
     // Use specific signaling state if available
-    if (remoteCameraOn === true) {
-      remotePlaceholder.classList.add('hidden');
-      return;
-    } else if (remoteCameraOn === false) {
-      remotePlaceholder.classList.remove('hidden');
+    if (remoteVideoEnabled !== null) {
+      if (remoteVideoEnabled && (remoteVideoSource === 'camera' || remoteVideoSource === 'screen')) {
+        remotePlaceholder.classList.add('hidden');
+      } else {
+        remotePlaceholder.classList.remove('hidden');
+      }
       return;
     }
 
@@ -360,7 +381,8 @@ const VideoChat = (() => {
     setDotStatus('connecting');
     const call = peer.call(remotePeerId, localStream);
     currentCall = call;
-    remoteCameraOn = null;
+    remoteVideoSource = null;
+    remoteVideoEnabled = null;
     setupDataConn(peer.connect(remotePeerId));
     handleCallStream(call);
   }
@@ -458,7 +480,7 @@ const VideoChat = (() => {
            
            hasRealVideoTrack = true;
            camOff = false;
-           if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: true }); }
+           if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: true }); }
            showToast('Camera enabled', 'success');
         } catch (err) {
            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
@@ -474,7 +496,7 @@ const VideoChat = (() => {
         // Already have a real track, just enable it
         localStream.getVideoTracks().forEach(t => { t.enabled = true; });
         camOff = false;
-        if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: true }); }
+        if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: true }); }
         const localPlaceholder = $('local-placeholder');
         if (localPlaceholder) localPlaceholder.classList.add('hidden');
         showToast('Camera enabled', 'success');
@@ -482,7 +504,7 @@ const VideoChat = (() => {
     } else {
       // Turn cam OFF (disable track, do not stop it)
       camOff = true;
-      if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: false }); }
+      if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: false }); }
       localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       const localPlaceholder = $('local-placeholder');
       if (localPlaceholder) localPlaceholder.classList.remove('hidden');
@@ -600,6 +622,7 @@ const VideoChat = (() => {
       if (localVideo) localVideo.srcObject = screenStream;
       showToast('Screen sharing started', 'success');
       screenSharing = true;
+      if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'screen', enabled: true }); }
       $('btn-screen') && $('btn-screen').classList.add('active');
       screenTrack.onended = () => {
         if (screenSharing) stopScreenShare();
@@ -619,6 +642,7 @@ const VideoChat = (() => {
     if (localVideo) { localVideo.srcObject = localStream; }
     $('btn-screen') && $('btn-screen').classList.remove('active');
     screenSharing = false;
+    if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'camera', enabled: !camOff }); }
     showToast('Screen sharing stopped', 'info');
   }
 
