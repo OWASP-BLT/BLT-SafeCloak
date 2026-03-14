@@ -10,10 +10,22 @@ const VideoChat = (() => {
   let audioContext = null;
   let analyser = null;
   let voiceAnimFrame = null;
-  let micMuted = false;
-  let camOff = false;
+  let micMuted = true;
+  let camOff = true;
   let consentGiven = false;
   let screenSharing = false;
+  let dummyAudioContext = null;
+  let hasRealAudioTrack = false;
+  let hasRealVideoTrack = false;
+  let dataConn = null;
+  let remoteVideoSource = null;
+  let remoteVideoEnabled = null;
+  let micToggleInFlight = false;
+  let camToggleInFlight = false;
+  let shareScreenInFlight = false;
+  let activeScreenTrack = null;
+  let pendingDataConn = null;
+  let deniedTimeout = null;
 
   const state = {
     peerId: null,
@@ -86,30 +98,70 @@ const VideoChat = (() => {
   function showCameraDenied() {
     const denied = $('camera-denied');
     const instructions = $('camera-denied-instructions');
-    const mainGrid = $('main-grid');
     const permAlert = $('perm-alert');
     if (instructions) instructions.innerHTML = getCameraInstructions(detectBrowser());
-    if (denied) denied.style.display = 'flex';
-    if (mainGrid) mainGrid.style.display = 'none';
+    
+    if (deniedTimeout) {
+      clearTimeout(deniedTimeout);
+      deniedTimeout = null;
+    }
+
+    if (denied) {
+      denied.style.display = 'flex';
+      // Auto-hide the banner after 8 seconds
+      deniedTimeout = setTimeout(() => {
+        denied.style.display = 'none';
+        if (permAlert) permAlert.style.display = 'block';
+      }, 8000);
+    }
+    
     if (permAlert) permAlert.style.display = 'none';
     const retryBtn = $('btn-camera-retry');
-    if (retryBtn) retryBtn.addEventListener('click', () => location.reload());
+    if (retryBtn) {
+      // Use named handler to ensure we don't stack listeners if using addEventListener
+      // but here we just reset onclick for simplicity and idempotency
+      retryBtn.onclick = () => {
+        if (deniedTimeout) {
+          clearTimeout(deniedTimeout);
+          deniedTimeout = null;
+        }
+        if (denied) denied.style.display = 'none';
+        if (permAlert) permAlert.style.display = 'block';
+        void toggleCamera(); // Explicitly retry media acquisition
+      };
+    }
   }
 
   /* ── Media ── */
+  function getDummyStream() {
+    // Generate a blank video track
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 640, 480);
+    const videoStream = canvas.captureStream(1); // 1 FPS
+
+    // Generate an empty audio track
+    dummyAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = dummyAudioContext.createMediaStreamDestination();
+    const audioStream = dest.stream;
+
+    return new MediaStream([videoStream.getVideoTracks()[0], audioStream.getAudioTracks()[0]]);
+  }
+
   async function startLocalMedia() {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Start with a dummy stream to satisfy PeerJS requirements without prompting
+      localStream = getDummyStream();
+      
       const localVideo = $('local-video');
       if (localVideo) { localVideo.srcObject = localStream; localVideo.muted = true; }
-      startVoiceMeter(localStream);
+      
       return true;
     } catch (err) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
-        showCameraDenied();
-      } else {
-        showToast('Camera/mic access denied: ' + err.message, 'error');
-      }
+      showToast('Error initializing media stream: ' + err.message, 'error');
       return false;
     }
   }
@@ -166,12 +218,56 @@ const VideoChat = (() => {
       showToast('Connected to signaling server', 'success');
     });
 
+    peer.on('connection', conn => {
+      // Reject unsolicited connections or buffer them if currentCall is pending
+      if (!currentCall) {
+        if (!pendingDataConn) {
+          pendingDataConn = conn;
+          return;
+        }
+        // If a new connection comes from the same peer, replace the old one (closing it first)
+        if (pendingDataConn.peer === conn.peer) {
+          pendingDataConn.close();
+          pendingDataConn = conn;
+          return;
+        }
+        // Reject connections from others if we already have a pending one
+        conn.close();
+        return;
+      }
+      if (conn.peer !== currentCall.peer) {
+        conn.close();
+        return;
+      }
+      setupDataConn(conn);
+    });
+
     peer.on('call', async incomingCall => {
       if (!consentGiven) {
         const ok = await askConsent(incomingCall.peer);
-        if (!ok) { incomingCall.close(); return; }
+        if (!ok) { 
+          incomingCall.close(); 
+          if (pendingDataConn && pendingDataConn.peer === incomingCall.peer) {
+            pendingDataConn.close();
+            pendingDataConn = null;
+          }
+          return; 
+        }
       }
       currentCall = incomingCall;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      
+      // Check for buffered data connection
+      if (pendingDataConn) {
+        if (pendingDataConn.peer === currentCall.peer) {
+          setupDataConn(pendingDataConn);
+        } else {
+          pendingDataConn.close();
+        }
+        pendingDataConn = null;
+      }
+      
       incomingCall.answer(localStream);
       handleCallStream(incomingCall);
     });
@@ -188,10 +284,91 @@ const VideoChat = (() => {
     });
   }
 
+  function setupDataConn(conn) {
+    dataConn = conn;
+    conn.on('open', () => {
+      // Send our current camera state
+      conn.send({ type: 'video_state', source: screenSharing ? 'screen' : 'camera', enabled: screenSharing ? true : !camOff });
+    });
+    conn.on('data', data => {
+      if (data && data.type === 'video_state') {
+        remoteVideoSource = data.source;
+        remoteVideoEnabled = data.enabled;
+        updateRemoteVideoState();
+      }
+    });
+    conn.on('close', () => {
+      dataConn = null;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      updateRemoteVideoState();
+    });
+    conn.on('error', () => {
+      dataConn = null;
+      remoteVideoSource = null;
+      remoteVideoEnabled = null;
+      updateRemoteVideoState();
+    });
+  }
+
+  function updateRemoteVideoState() {
+    const remoteVideo = $('remote-video');
+    const remotePlaceholder = $('remote-placeholder');
+    if (!remoteVideo || !remotePlaceholder) return;
+    const remoteStream = remoteVideo.srcObject;
+
+    // Use specific signaling state if available
+    if (remoteVideoEnabled !== null) {
+      if (remoteVideoEnabled && (remoteVideoSource === 'camera' || remoteVideoSource === 'screen')) {
+        remotePlaceholder.classList.add('hidden');
+      } else {
+        remotePlaceholder.classList.remove('hidden');
+      }
+      return;
+    }
+
+    // Fallback: check track stat if signaling hasn't arrived
+    if (!remoteStream) {
+      remotePlaceholder.classList.remove('hidden');
+      return;
+    }
+    const videoTracks = remoteStream.getVideoTracks();
+    // Use !track.muted (spec-defined for remote tracks) instead of .enabled
+    const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted);
+    if (hasActiveVideo) {
+      remotePlaceholder.classList.add('hidden');
+    } else {
+      remotePlaceholder.classList.remove('hidden');
+    }
+  }
+
   function handleCallStream(call) {
     call.on('stream', remoteStream => {
       const remoteVideo = $('remote-video');
+      const remotePlaceholder = $('remote-placeholder');
+      
       if (remoteVideo) { remoteVideo.srcObject = remoteStream; }
+      
+      // Initial check
+      updateRemoteVideoState();
+
+      // Listen for remote track changes (when they toggle during a call)
+      remoteStream.getTracks().forEach(track => {
+        track.onmute = updateRemoteVideoState;
+        track.onunmute = updateRemoteVideoState;
+        // Some browsers fire 'ended' when the track is replaced/stopped
+        track.onended = updateRemoteVideoState; 
+      });
+
+      // Listen for track additions/removals
+      remoteStream.onaddtrack = (e) => {
+        e.track.onmute = updateRemoteVideoState;
+        e.track.onunmute = updateRemoteVideoState;
+        e.track.onended = updateRemoteVideoState;
+        updateRemoteVideoState();
+      };
+      remoteStream.onremovetrack = updateRemoteVideoState;
+
       state.connected = true;
       updateStatus('🔒 Encrypted call active', 'success');
       setDotStatus('online');
@@ -199,11 +376,18 @@ const VideoChat = (() => {
     });
 
     call.on('close', () => {
+      currentCall = null;
+      if (dataConn) {
+        dataConn.close();
+        dataConn = null;
+      }
       state.connected = false;
       updateStatus('Call ended', 'muted');
       setDotStatus('offline');
       const remoteVideo = $('remote-video');
       if (remoteVideo) remoteVideo.srcObject = null;
+      const remotePlaceholder = $('remote-placeholder');
+      if (remotePlaceholder) remotePlaceholder.classList.remove('hidden');
     });
 
     call.on('error', err => {
@@ -225,43 +409,171 @@ const VideoChat = (() => {
     setDotStatus('connecting');
     const call = peer.call(remotePeerId, localStream);
     currentCall = call;
+    remoteVideoSource = null;
+    remoteVideoEnabled = null;
+    setupDataConn(peer.connect(remotePeerId));
     handleCallStream(call);
   }
 
   /* ── Controls ── */
-  function toggleMic() {
-    if (!localStream) return;
-    micMuted = !micMuted;
-    localStream.getAudioTracks().forEach(t => (t.enabled = !micMuted));
+  async function toggleMic() {
+    if (!localStream || micToggleInFlight) return;
+    
+    // If mic is currently muted, we want to turn it ON
+    if (micMuted) {
+      if (!hasRealAudioTrack) {
+        micToggleInFlight = true;
+        let realAudioTrack = null;
+        // First time unmuting - need to request actual permission
+        try {
+          const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          realAudioTrack = realAudioStream.getAudioTracks()[0];
+          
+          const oldAudioTrack = localStream.getAudioTracks()[0];
+          // Update peer connection sender first
+          if (currentCall && currentCall.peerConnection) {
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+            if (sender) await sender.replaceTrack(realAudioTrack);
+          }
+
+          // Commit local stream swap only after successful sender update
+          if (oldAudioTrack) {
+            localStream.removeTrack(oldAudioTrack);
+            oldAudioTrack.stop();
+          }
+          localStream.addTrack(realAudioTrack);
+          
+          startVoiceMeter(localStream);
+          hasRealAudioTrack = true;
+          micMuted = false;
+          showToast('Microphone enabled', 'success');
+        } catch (err) {
+          // Roll back newly acquired track when first-enable fails
+          if (realAudioTrack) realAudioTrack.stop();
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+               showToast('Microphone access denied', 'warning');
+          } else {
+               showToast('Microphone error: ' + err.message, 'error');
+          }
+          micToggleInFlight = false;
+          return;
+        }
+        micToggleInFlight = false;
+      } else {
+        // Already have a real track, just enable it
+        localStream.getAudioTracks().forEach(t => { t.enabled = true; });
+        micMuted = false;
+        showToast('Microphone unmuted', 'success');
+      }
+    } else {
+      // Turn mic OFF (mute the existing real track, do not stop it)
+      micMuted = true;
+      localStream.getAudioTracks().forEach(t => { t.enabled = false; });
+      showToast('Microphone muted', 'info');
+    }
+
     const btn = $('btn-mic');
     if (btn) {
-      btn.textContent = micMuted ? '🔇' : '🎙️';
+      btn.innerHTML = micMuted ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>' : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
       btn.title = micMuted ? 'Unmute mic' : 'Mute mic';
-      btn.classList.toggle('active', micMuted);
+      btn.classList.toggle('active', !micMuted);
     }
-    showToast(micMuted ? 'Microphone muted' : 'Microphone unmuted', 'info');
   }
 
-  function toggleCamera() {
-    if (!localStream) return;
-    camOff = !camOff;
-    localStream.getVideoTracks().forEach(t => (t.enabled = !camOff));
+  async function toggleCamera() {
+    if (!localStream || camToggleInFlight) return;
+    
+    // If cam is currently off, we want to turn it ON
+    if (camOff) {
+      if (!hasRealVideoTrack) {
+        camToggleInFlight = true;
+        let realVideoTrack = null;
+        // First time enabling camera - need to request actual permission
+        try {
+           const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+           realVideoTrack = realVideoStream.getVideoTracks()[0];
+           
+           // Remove dummy track and add new real track to localStream
+           const oldVideoTrack = localStream.getVideoTracks()[0];
+           if (oldVideoTrack) {
+              localStream.removeTrack(oldVideoTrack);
+              oldVideoTrack.stop();
+           }
+           localStream.addTrack(realVideoTrack);
+           
+           // Update peer connection senders if in a call
+           if (currentCall && currentCall.peerConnection) {
+              const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+              if (sender && !screenSharing) await sender.replaceTrack(realVideoTrack);
+           }
+           
+           const localPlaceholder = $('local-placeholder');
+           if (localPlaceholder) localPlaceholder.classList.add('hidden');
+           
+           hasRealVideoTrack = true;
+           camOff = false;
+           if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: true }); }
+           showToast('Camera enabled', 'success');
+        } catch (err) {
+           // Roll back newly acquired track when first-enable fails
+           if (realVideoTrack) realVideoTrack.stop();
+           if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+               showCameraDenied();
+           } else {
+               showToast('Camera error: ' + err.message, 'error');
+           }
+           camToggleInFlight = false;
+           return;
+        }
+        camToggleInFlight = false;
+      } else {
+        // Already have a real track, just enable it
+        localStream.getVideoTracks().forEach(t => { t.enabled = true; });
+        camOff = false;
+        if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: true }); }
+        const localPlaceholder = $('local-placeholder');
+        if (localPlaceholder) localPlaceholder.classList.add('hidden');
+        showToast('Camera enabled', 'success');
+      }
+    } else {
+      // Turn cam OFF (disable track, do not stop it)
+      camOff = true;
+      if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'video_state', source: 'camera', enabled: false }); }
+      localStream.getVideoTracks().forEach(t => { t.enabled = false; });
+      const localPlaceholder = $('local-placeholder');
+      if (localPlaceholder) localPlaceholder.classList.remove('hidden');
+      showToast('Camera disabled', 'info');
+    }
+
     const btn = $('btn-cam');
     if (btn) {
-      btn.textContent = camOff ? '📷' : '🎥';
+      btn.innerHTML = camOff ? '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>' : '<i class="fa-solid fa-video" aria-hidden="true"></i>';
       btn.title = camOff ? 'Enable camera' : 'Disable camera';
-      btn.classList.toggle('active', camOff);
+      btn.classList.toggle('active', !camOff);
     }
-    showToast(camOff ? 'Camera disabled' : 'Camera enabled', 'info');
   }
 
   function endCall() {
+    if (activeScreenTrack) {
+      activeScreenTrack.onended = null;
+      activeScreenTrack.stop();
+      activeScreenTrack = null;
+    }
+    screenSharing = false;
+    shareScreenInFlight = false;
+    $('btn-screen') && $('btn-screen').classList.remove('active');
+    const localVideo = $('local-video');
+    if (localVideo && localStream) localVideo.srcObject = localStream;
+    
     if (currentCall) { currentCall.close(); currentCall = null; }
+    if (dataConn) { dataConn.close(); dataConn = null; }
     state.connected = false;
     updateStatus('Call ended', 'muted');
     setDotStatus('offline');
     const remoteVideo = $('remote-video');
     if (remoteVideo) remoteVideo.srcObject = null;
+    const remotePlaceholder = $('remote-placeholder');
+    if (remotePlaceholder) remotePlaceholder.classList.remove('hidden');
     showToast('Call ended', 'info');
     // Record consent end
     ConsentManager && ConsentManager.record({
@@ -280,6 +592,7 @@ const VideoChat = (() => {
     setDotStatus('offline');
     updateStatus('Disconnected', 'muted');
     showToast('Session ended and media released', 'success');
+    if (dummyAudioContext) { dummyAudioContext.close(); dummyAudioContext = null; }
   }
 
   /* ── Noise suppression hint ── */
@@ -306,20 +619,23 @@ const VideoChat = (() => {
       overlay.className = 'modal-overlay';
       overlay.style.display = 'flex';
       overlay.innerHTML = `
-        <div class="modal" style="max-width:440px">
-          <h3>🔒 Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong style="color:#fff">${callerName}</strong>?</p>
-          <div class="alert alert-info" style="margin-bottom:1rem">
-            <span>ℹ️</span>
+        <div class="bg-white rounded-xl p-6 shadow-2xl max-w-md w-full border border-neutral-border">
+          <h3 class="text-xl font-extrabold text-gray-900 mb-2">🔒 Recording Consent Required</h3>
+          <p class="text-gray-600 mb-4 text-sm leading-relaxed">This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong class="text-gray-900 font-bold" id="consent-caller-name"></strong>?</p>
+          <div class="alert alert-info mb-5">
+            <i class="fa-solid fa-circle-info mt-0.5"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
           </div>
-          <div style="display:flex;gap:0.75rem;justify-content:flex-end">
-            <button class="btn btn-secondary" id="consent-deny">Decline</button>
-            <button class="btn btn-primary" id="consent-allow">I Consent</button>
+          <div class="flex justify-end gap-3">
+            <button class="btn btn-secondary w-full sm:w-auto" id="consent-deny">Decline</button>
+            <button class="btn btn-primary w-full sm:w-auto" id="consent-allow">I Consent</button>
           </div>
         </div>
       `;
       document.body.appendChild(overlay);
+      
+      const callerNameEl = overlay.querySelector('#consent-caller-name');
+      if (callerNameEl) callerNameEl.textContent = callerName;
 
       overlay.querySelector('#consent-allow').onclick = () => {
         consentGiven = true;
@@ -340,41 +656,95 @@ const VideoChat = (() => {
 
   /* ── Screen share ── */
   async function shareScreen() {
+    if (screenSharing || shareScreenInFlight) return;
+    shareScreenInFlight = true;
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
+      activeScreenTrack = screenStream.getVideoTracks()[0];
       if (currentCall && currentCall.peerConnection) {
         const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) await sender.replaceTrack(screenTrack);
+        if (sender) await sender.replaceTrack(activeScreenTrack);
       }
       const localVideo = $('local-video');
       if (localVideo) localVideo.srcObject = screenStream;
       showToast('Screen sharing started', 'success');
       screenSharing = true;
+      if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'screen', enabled: true }); }
       $('btn-screen') && $('btn-screen').classList.add('active');
-      screenTrack.onended = () => {
-        if (screenSharing) stopScreenShare();
+      activeScreenTrack.onended = () => {
+        if (screenSharing) void stopScreenShare();
       };
     } catch (err) {
       if (err.name !== 'NotAllowedError') showToast('Screen share error: ' + err.message, 'error');
     }
+    shareScreenInFlight = false;
   }
 
-  function stopScreenShare() {
-    if (!localStream || !currentCall) return;
+  async function stopScreenShare() {
+    if (!localStream) return;
+    
+    if (activeScreenTrack) {
+       activeScreenTrack.stop(); // Tell browser to stop recording the screen!
+       activeScreenTrack = null;
+    }
+    
     const videoTrack = localStream.getVideoTracks()[0];
-    if (!videoTrack) return;
-    const sender = currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-    if (sender) sender.replaceTrack(videoTrack);
+    if (videoTrack) {
+      const sender = currentCall && currentCall.peerConnection && currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        try {
+          await sender.replaceTrack(videoTrack);
+        } catch (err) {
+          showToast('Failed to restore camera after screen share: ' + err.message, 'error');
+        }
+      }
+    }
     const localVideo = $('local-video');
     if (localVideo) { localVideo.srcObject = localStream; }
     $('btn-screen') && $('btn-screen').classList.remove('active');
     screenSharing = false;
+    if (dataConn && dataConn.open) { dataConn.send({ type: 'video_state', source: 'camera', enabled: !camOff }); }
     showToast('Screen sharing stopped', 'info');
+  }
+
+  function initEventListeners() {
+    const btnMic = $('btn-mic');
+    if (btnMic) btnMic.onclick = () => toggleMic().catch(e => showToast('Mic error: ' + e.message, 'error'));
+
+    const btnCam = $('btn-cam');
+    if (btnCam) btnCam.onclick = () => toggleCamera().catch(e => showToast('Camera error: ' + e.message, 'error'));
+
+    const btnNoise = $('btn-noise');
+    if (btnNoise) btnNoise.onclick = () => toggleNoiseSuppression().catch(e => showToast('Suppression error: ' + e.message, 'error'));
+
+    const btnScreen = $('btn-screen');
+    if (btnScreen) btnScreen.onclick = () => shareScreen().catch(e => showToast('Share error: ' + e.message, 'error'));
+
+    const btnEnd = $('btn-end');
+    if (btnEnd) btnEnd.onclick = () => hangup();
+
+    const btnCopy = $('btn-copy-id');
+    if (btnCopy) {
+      btnCopy.onclick = () => {
+        const id = $('my-peer-id');
+        if (id && id.textContent !== 'Connecting...') {
+          copyToClipboard(id.textContent, 'Room ID');
+        }
+      };
+    }
+
+    const btnCall = $('btn-call');
+    if (btnCall) {
+      btnCall.onclick = () => {
+        const id = $('remote-id');
+        if (id) callPeer(id.value.trim());
+      };
+    }
   }
 
   /* ── Init ── */
   async function init() {
+    initEventListeners();
     const ok = await startLocalMedia();
     if (ok) await initPeer();
   }
