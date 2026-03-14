@@ -10,8 +10,8 @@ const VideoChat = (() => {
   let audioContext = null;
   let analyser = null;
   let voiceAnimFrame = null;
-  let micMuted = false;
-  let camOff = false;
+  let micMuted = true;
+  let camOff = true;
   let consentGiven = false;
   let screenSharing = false;
 
@@ -89,27 +89,53 @@ const VideoChat = (() => {
     const mainGrid = $('main-grid');
     const permAlert = $('perm-alert');
     if (instructions) instructions.innerHTML = getCameraInstructions(detectBrowser());
-    if (denied) denied.style.display = 'flex';
-    if (mainGrid) mainGrid.style.display = 'none';
+    if (denied) {
+      denied.style.display = 'flex';
+      // Auto-hide the banner after 8 seconds
+      setTimeout(() => {
+        denied.style.display = 'none';
+        if (permAlert) permAlert.style.display = 'block';
+      }, 8000);
+    }
+    
     if (permAlert) permAlert.style.display = 'none';
     const retryBtn = $('btn-camera-retry');
-    if (retryBtn) retryBtn.addEventListener('click', () => location.reload());
+    if (retryBtn) retryBtn.addEventListener('click', () => {
+      denied.style.display = 'none';
+      if (permAlert) permAlert.style.display = 'block';
+    });
   }
 
   /* ── Media ── */
+  function getDummyStream() {
+    // Generate a blank video track
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 640, 480);
+    const videoStream = canvas.captureStream(1); // 1 FPS
+
+    // Generate an empty audio track
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = ac.createMediaStreamDestination();
+    const audioStream = dest.stream;
+
+    return new MediaStream([videoStream.getVideoTracks()[0], audioStream.getAudioTracks()[0]]);
+  }
+
   async function startLocalMedia() {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Start with a dummy stream to satisfy PeerJS requirements without prompting
+      localStream = getDummyStream();
+      
       const localVideo = $('local-video');
       if (localVideo) { localVideo.srcObject = localStream; localVideo.muted = true; }
-      startVoiceMeter(localStream);
+      
       return true;
     } catch (err) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
-        showCameraDenied();
-      } else {
-        showToast('Camera/mic access denied: ' + err.message, 'error');
-      }
+      showToast('Error initializing media stream: ' + err.message, 'error');
       return false;
     }
   }
@@ -192,6 +218,8 @@ const VideoChat = (() => {
     call.on('stream', remoteStream => {
       const remoteVideo = $('remote-video');
       if (remoteVideo) { remoteVideo.srcObject = remoteStream; }
+      const remotePlaceholder = $('remote-placeholder');
+      if (remotePlaceholder) remotePlaceholder.classList.add('hidden');
       state.connected = true;
       updateStatus('🔒 Encrypted call active', 'success');
       setDotStatus('online');
@@ -204,6 +232,8 @@ const VideoChat = (() => {
       setDotStatus('offline');
       const remoteVideo = $('remote-video');
       if (remoteVideo) remoteVideo.srcObject = null;
+      const remotePlaceholder = $('remote-placeholder');
+      if (remotePlaceholder) remotePlaceholder.classList.remove('hidden');
     });
 
     call.on('error', err => {
@@ -229,30 +259,106 @@ const VideoChat = (() => {
   }
 
   /* ── Controls ── */
-  function toggleMic() {
+  async function toggleMic() {
     if (!localStream) return;
-    micMuted = !micMuted;
-    localStream.getAudioTracks().forEach(t => (t.enabled = !micMuted));
+    
+    // If mic is currently muted (or using dummy track), we want to turn it ON
+    if (micMuted) {
+      try {
+        const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const realAudioTrack = realAudioStream.getAudioTracks()[0];
+        
+        // Remove old track and add new real track to localStream
+        const oldAudioTrack = localStream.getAudioTracks()[0];
+        if (oldAudioTrack) {
+           localStream.removeTrack(oldAudioTrack);
+           oldAudioTrack.stop();
+        }
+        localStream.addTrack(realAudioTrack);
+        
+        // Update peer connection senders if in a call
+        if (currentCall && currentCall.peerConnection) {
+          const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (sender) sender.replaceTrack(realAudioTrack);
+        }
+        
+        startVoiceMeter(localStream);
+        micMuted = false;
+        showToast('Microphone enabled', 'success');
+      } catch (err) {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+             showToast('Microphone access denied', 'warning');
+        } else {
+             showToast('Microphone error: ' + err.message, 'error');
+        }
+        return;
+      }
+    } else {
+      // Turn mic OFF (mute the existing real track)
+      micMuted = true;
+      localStream.getAudioTracks().forEach(t => (t.enabled = false));
+      showToast('Microphone muted', 'info');
+    }
+
     const btn = $('btn-mic');
     if (btn) {
-      btn.textContent = micMuted ? '🔇' : '🎙️';
+      btn.innerHTML = micMuted ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>' : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
       btn.title = micMuted ? 'Unmute mic' : 'Mute mic';
-      btn.classList.toggle('active', micMuted);
+      btn.classList.toggle('active', !micMuted);
     }
-    showToast(micMuted ? 'Microphone muted' : 'Microphone unmuted', 'info');
   }
 
-  function toggleCamera() {
+  async function toggleCamera() {
     if (!localStream) return;
-    camOff = !camOff;
-    localStream.getVideoTracks().forEach(t => (t.enabled = !camOff));
+    
+    // If cam is currently off (or using dummy track), we want to turn it ON
+    if (camOff) {
+      try {
+         const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+         const realVideoTrack = realVideoStream.getVideoTracks()[0];
+         
+         // Remove old track and add new real track to localStream
+         const oldVideoTrack = localStream.getVideoTracks()[0];
+         if (oldVideoTrack) {
+            localStream.removeTrack(oldVideoTrack);
+            oldVideoTrack.stop();
+         }
+         localStream.addTrack(realVideoTrack);
+         
+         // Update peer connection senders if in a call
+         if (currentCall && currentCall.peerConnection) {
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) sender.replaceTrack(realVideoTrack);
+         }
+         
+         const localPlaceholder = $('local-placeholder');
+         if (localPlaceholder) localPlaceholder.classList.add('hidden');
+         
+         camOff = false;
+         showToast('Camera enabled', 'success');
+      } catch (err) {
+         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
+             showCameraDenied();
+         } else {
+             showToast('Camera error: ' + err.message, 'error');
+         }
+         return;
+      }
+    } else {
+      // Turn cam OFF
+      camOff = true;
+      localStream.getVideoTracks().forEach(t => (t.enabled = false));
+      const localPlaceholder = $('local-placeholder');
+      if (localPlaceholder) localPlaceholder.classList.remove('hidden');
+      showToast('Camera disabled', 'info');
+    }
+
     const btn = $('btn-cam');
     if (btn) {
-      btn.textContent = camOff ? '📷' : '🎥';
+      btn.innerHTML = camOff ? '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>' : '<i class="fa-solid fa-video" aria-hidden="true"></i>';
       btn.title = camOff ? 'Enable camera' : 'Disable camera';
-      btn.classList.toggle('active', camOff);
+      btn.classList.toggle('active', !camOff);
     }
-    showToast(camOff ? 'Camera disabled' : 'Camera enabled', 'info');
   }
 
   function endCall() {
@@ -262,6 +368,8 @@ const VideoChat = (() => {
     setDotStatus('offline');
     const remoteVideo = $('remote-video');
     if (remoteVideo) remoteVideo.srcObject = null;
+    const remotePlaceholder = $('remote-placeholder');
+    if (remotePlaceholder) remotePlaceholder.classList.remove('hidden');
     showToast('Call ended', 'info');
     // Record consent end
     ConsentManager && ConsentManager.record({
@@ -306,16 +414,16 @@ const VideoChat = (() => {
       overlay.className = 'modal-overlay';
       overlay.style.display = 'flex';
       overlay.innerHTML = `
-        <div class="modal" style="max-width:440px">
-          <h3>🔒 Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong style="color:#fff">${callerName}</strong>?</p>
-          <div class="alert alert-info" style="margin-bottom:1rem">
-            <span>ℹ️</span>
+        <div class="bg-white rounded-xl p-6 shadow-2xl max-w-md w-full border border-neutral-border">
+          <h3 class="text-xl font-extrabold text-gray-900 mb-2">🔒 Recording Consent Required</h3>
+          <p class="text-gray-600 mb-4 text-sm leading-relaxed">This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong class="text-gray-900 font-bold">${callerName}</strong>?</p>
+          <div class="alert alert-info mb-5">
+            <i class="fa-solid fa-circle-info mt-0.5"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
           </div>
-          <div style="display:flex;gap:0.75rem;justify-content:flex-end">
-            <button class="btn btn-secondary" id="consent-deny">Decline</button>
-            <button class="btn btn-primary" id="consent-allow">I Consent</button>
+          <div class="flex justify-end gap-3">
+            <button class="btn btn-secondary w-full sm:w-auto" id="consent-deny">Decline</button>
+            <button class="btn btn-primary w-full sm:w-auto" id="consent-allow">I Consent</button>
           </div>
         </div>
       `;
