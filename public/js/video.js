@@ -115,7 +115,7 @@ const VideoChat = (() => {
           clearTimeout(deniedTimeout);
           deniedTimeout = null;
         }
-        denied.style.display = 'none';
+        if (denied) denied.style.display = 'none';
         if (permAlert) permAlert.style.display = 'block';
         toggleCamera(); // Retry media acquisition
       };
@@ -243,7 +243,7 @@ const VideoChat = (() => {
         const videoTracks = remoteStream.getVideoTracks();
         // Check if there's at least one active (not stopped) and enabled track
         // Also check if it's the 1 FPS dummy track (by checking width/height or just enabled state)
-        const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && track.enabled);
+        const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted);
         
         if (hasActiveVideo) {
           remotePlaceholder.classList.add('hidden');
@@ -333,7 +333,7 @@ const VideoChat = (() => {
           // Update peer connection senders if in a call
           if (currentCall && currentCall.peerConnection) {
             const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
-            if (sender) sender.replaceTrack(realAudioTrack);
+            if (sender) await sender.replaceTrack(realAudioTrack);
           }
           
           startVoiceMeter(localStream);
@@ -391,7 +391,7 @@ const VideoChat = (() => {
            // Update peer connection senders if in a call
            if (currentCall && currentCall.peerConnection) {
               const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-              if (sender) sender.replaceTrack(realVideoTrack);
+              if (sender) await sender.replaceTrack(realVideoTrack);
            }
            
            const localPlaceholder = $('local-placeholder');
