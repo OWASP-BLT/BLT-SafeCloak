@@ -15,8 +15,11 @@ const VideoChat = (() => {
   let consentGiven = false;
   let screenSharing = false;
   let deniedTimeout = null;
+  let dummyAudioContext = null;
   let hasRealAudioTrack = false;
   let hasRealVideoTrack = false;
+  let dataConn = null;
+  let remoteCameraOn = null;
 
   const state = {
     peerId: null,
@@ -134,8 +137,8 @@ const VideoChat = (() => {
     const videoStream = canvas.captureStream(1); // 1 FPS
 
     // Generate an empty audio track
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const dest = ac.createMediaStreamDestination();
+    dummyAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = dummyAudioContext.createMediaStreamDestination();
     const audioStream = dest.stream;
 
     return new MediaStream([videoStream.getVideoTracks()[0], audioStream.getAudioTracks()[0]]);
@@ -208,12 +211,17 @@ const VideoChat = (() => {
       showToast('Connected to signaling server', 'success');
     });
 
+    peer.on('connection', conn => {
+      setupDataConn(conn);
+    });
+
     peer.on('call', async incomingCall => {
       if (!consentGiven) {
         const ok = await askConsent(incomingCall.peer);
         if (!ok) { incomingCall.close(); return; }
       }
       currentCall = incomingCall;
+      remoteCameraOn = null;
       incomingCall.answer(localStream);
       handleCallStream(incomingCall);
     });
@@ -230,6 +238,55 @@ const VideoChat = (() => {
     });
   }
 
+  function setupDataConn(conn) {
+    dataConn = conn;
+    conn.on('open', () => {
+      // Send our current camera state
+      conn.send({ type: 'camera_state', enabled: !camOff });
+    });
+    conn.on('data', data => {
+      if (data && data.type === 'camera_state') {
+        remoteCameraOn = data.enabled;
+        updateRemoteVideoState();
+      }
+    });
+    conn.on('close', () => {
+      dataConn = null;
+    });
+    conn.on('error', () => {
+      dataConn = null;
+    });
+  }
+
+  function updateRemoteVideoState() {
+    const remoteVideo = $('remote-video');
+    const remotePlaceholder = $('remote-placeholder');
+    if (!remoteVideo || !remotePlaceholder) return;
+    const remoteStream = remoteVideo.srcObject;
+
+    // Use specific signaling state if available
+    if (remoteCameraOn === true) {
+      remotePlaceholder.classList.add('hidden');
+      return;
+    } else if (remoteCameraOn === false) {
+      remotePlaceholder.classList.remove('hidden');
+      return;
+    }
+
+    // Fallback: check track stat if signaling hasn't arrived
+    if (!remoteStream) {
+      remotePlaceholder.classList.remove('hidden');
+      return;
+    }
+    const videoTracks = remoteStream.getVideoTracks();
+    const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted && track.enabled);
+    if (hasActiveVideo) {
+      remotePlaceholder.classList.add('hidden');
+    } else {
+      remotePlaceholder.classList.remove('hidden');
+    }
+  }
+
   function handleCallStream(call) {
     call.on('stream', remoteStream => {
       const remoteVideo = $('remote-video');
@@ -237,40 +294,25 @@ const VideoChat = (() => {
       
       if (remoteVideo) { remoteVideo.srcObject = remoteStream; }
       
-      // Helper function to check track status
-      const checkRemoteVideoState = () => {
-        if (!remotePlaceholder) return;
-        const videoTracks = remoteStream.getVideoTracks();
-        // Check if there's at least one active (not stopped) and enabled track
-        // Also check if it's the 1 FPS dummy track (by checking width/height or just enabled state)
-        const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted);
-        
-        if (hasActiveVideo) {
-          remotePlaceholder.classList.add('hidden');
-        } else {
-          remotePlaceholder.classList.remove('hidden');
-        }
-      };
-
       // Initial check
-      checkRemoteVideoState();
+      updateRemoteVideoState();
 
       // Listen for remote track changes (when they toggle during a call)
       remoteStream.getTracks().forEach(track => {
-        track.onmute = checkRemoteVideoState;
-        track.onunmute = checkRemoteVideoState;
+        track.onmute = updateRemoteVideoState;
+        track.onunmute = updateRemoteVideoState;
         // Some browsers fire 'ended' when the track is replaced/stopped
-        track.onended = checkRemoteVideoState; 
+        track.onended = updateRemoteVideoState; 
       });
 
       // Listen for track additions/removals
       remoteStream.onaddtrack = (e) => {
-        e.track.onmute = checkRemoteVideoState;
-        e.track.onunmute = checkRemoteVideoState;
-        e.track.onended = checkRemoteVideoState;
-        checkRemoteVideoState();
+        e.track.onmute = updateRemoteVideoState;
+        e.track.onunmute = updateRemoteVideoState;
+        e.track.onended = updateRemoteVideoState;
+        updateRemoteVideoState();
       };
-      remoteStream.onremovetrack = checkRemoteVideoState;
+      remoteStream.onremovetrack = updateRemoteVideoState;
 
       state.connected = true;
       updateStatus('🔒 Encrypted call active', 'success');
@@ -307,6 +349,8 @@ const VideoChat = (() => {
     setDotStatus('connecting');
     const call = peer.call(remotePeerId, localStream);
     currentCall = call;
+    remoteCameraOn = null;
+    setupDataConn(peer.connect(remotePeerId));
     handleCallStream(call);
   }
 
@@ -350,14 +394,14 @@ const VideoChat = (() => {
         }
       } else {
         // Already have a real track, just enable it
-        localStream.getAudioTracks().forEach(t => (t.enabled = true));
+        localStream.getAudioTracks().forEach(t => { t.enabled = true; });
         micMuted = false;
         showToast('Microphone unmuted', 'success');
       }
     } else {
       // Turn mic OFF (mute the existing real track, do not stop it)
       micMuted = true;
-      localStream.getAudioTracks().forEach(t => (t.enabled = false));
+      localStream.getAudioTracks().forEach(t => { t.enabled = false; });
       showToast('Microphone muted', 'info');
     }
 
@@ -399,6 +443,7 @@ const VideoChat = (() => {
            
            hasRealVideoTrack = true;
            camOff = false;
+           if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: true }); }
            showToast('Camera enabled', 'success');
         } catch (err) {
            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
@@ -410,8 +455,9 @@ const VideoChat = (() => {
         }
       } else {
         // Already have a real track, just enable it
-        localStream.getVideoTracks().forEach(t => (t.enabled = true));
+        localStream.getVideoTracks().forEach(t => { t.enabled = true; });
         camOff = false;
+        if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: true }); }
         const localPlaceholder = $('local-placeholder');
         if (localPlaceholder) localPlaceholder.classList.add('hidden');
         showToast('Camera enabled', 'success');
@@ -419,7 +465,8 @@ const VideoChat = (() => {
     } else {
       // Turn cam OFF (disable track, do not stop it)
       camOff = true;
-      localStream.getVideoTracks().forEach(t => (t.enabled = false));
+      if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: false }); }
+      localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       const localPlaceholder = $('local-placeholder');
       if (localPlaceholder) localPlaceholder.classList.remove('hidden');
       showToast('Camera disabled', 'info');
@@ -460,6 +507,7 @@ const VideoChat = (() => {
     setDotStatus('offline');
     updateStatus('Disconnected', 'muted');
     showToast('Session ended and media released', 'success');
+    if (dummyAudioContext) { dummyAudioContext.close(); dummyAudioContext = null; }
   }
 
   /* ── Noise suppression hint ── */
