@@ -14,12 +14,13 @@ const VideoChat = (() => {
   let camOff = true;
   let consentGiven = false;
   let screenSharing = false;
-  let deniedTimeout = null;
   let dummyAudioContext = null;
   let hasRealAudioTrack = false;
   let hasRealVideoTrack = false;
   let dataConn = null;
   let remoteCameraOn = null;
+  let micToggleInFlight = false;
+  let camToggleInFlight = false;
 
   const state = {
     peerId: null,
@@ -212,6 +213,11 @@ const VideoChat = (() => {
     });
 
     peer.on('connection', conn => {
+      // Reject unsolicited connections
+      if (!currentCall || conn.peer !== currentCall.peer) {
+        conn.close();
+        return;
+      }
       setupDataConn(conn);
     });
 
@@ -321,6 +327,11 @@ const VideoChat = (() => {
     });
 
     call.on('close', () => {
+      currentCall = null;
+      if (dataConn) {
+        dataConn.close();
+        dataConn = null;
+      }
       state.connected = false;
       updateStatus('Call ended', 'muted');
       setDotStatus('offline');
@@ -356,11 +367,12 @@ const VideoChat = (() => {
 
   /* ── Controls ── */
   async function toggleMic() {
-    if (!localStream) return;
+    if (!localStream || micToggleInFlight) return;
     
     // If mic is currently muted, we want to turn it ON
     if (micMuted) {
       if (!hasRealAudioTrack) {
+        micToggleInFlight = true;
         // First time unmuting - need to request actual permission
         try {
           const realAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -390,8 +402,10 @@ const VideoChat = (() => {
           } else {
                showToast('Microphone error: ' + err.message, 'error');
           }
+          micToggleInFlight = false;
           return;
         }
+        micToggleInFlight = false;
       } else {
         // Already have a real track, just enable it
         localStream.getAudioTracks().forEach(t => { t.enabled = true; });
@@ -414,11 +428,12 @@ const VideoChat = (() => {
   }
 
   async function toggleCamera() {
-    if (!localStream) return;
+    if (!localStream || camToggleInFlight) return;
     
     // If cam is currently off, we want to turn it ON
     if (camOff) {
       if (!hasRealVideoTrack) {
+        camToggleInFlight = true;
         // First time enabling camera - need to request actual permission
         try {
            const realVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -435,7 +450,7 @@ const VideoChat = (() => {
            // Update peer connection senders if in a call
            if (currentCall && currentCall.peerConnection) {
               const sender = currentCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-              if (sender) await sender.replaceTrack(realVideoTrack);
+              if (sender && !screenSharing) await sender.replaceTrack(realVideoTrack);
            }
            
            const localPlaceholder = $('local-placeholder');
@@ -443,7 +458,7 @@ const VideoChat = (() => {
            
            hasRealVideoTrack = true;
            camOff = false;
-           if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: true }); }
+           if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: true }); }
            showToast('Camera enabled', 'success');
         } catch (err) {
            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') {
@@ -451,13 +466,15 @@ const VideoChat = (() => {
            } else {
                showToast('Camera error: ' + err.message, 'error');
            }
+           camToggleInFlight = false;
            return;
         }
+        camToggleInFlight = false;
       } else {
         // Already have a real track, just enable it
         localStream.getVideoTracks().forEach(t => { t.enabled = true; });
         camOff = false;
-        if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: true }); }
+        if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: true }); }
         const localPlaceholder = $('local-placeholder');
         if (localPlaceholder) localPlaceholder.classList.add('hidden');
         showToast('Camera enabled', 'success');
@@ -465,7 +482,7 @@ const VideoChat = (() => {
     } else {
       // Turn cam OFF (disable track, do not stop it)
       camOff = true;
-      if (dataConn && dataConn.open) { dataConn.send({ type: 'camera_state', enabled: false }); }
+      if (dataConn && dataConn.open && !screenSharing) { dataConn.send({ type: 'camera_state', enabled: false }); }
       localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       const localPlaceholder = $('local-placeholder');
       if (localPlaceholder) localPlaceholder.classList.remove('hidden');
@@ -482,6 +499,7 @@ const VideoChat = (() => {
 
   function endCall() {
     if (currentCall) { currentCall.close(); currentCall = null; }
+    if (dataConn) { dataConn.close(); dataConn = null; }
     state.connected = false;
     updateStatus('Call ended', 'muted');
     setDotStatus('offline');
