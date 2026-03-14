@@ -155,19 +155,19 @@
           </div>
 
           <div class="video-controls mt-4" id="call-controls" role="toolbar" aria-label="Call controls">
-            <button class="control-btn" id="btn-mic" title="Unmute mic" onclick="VideoChat.toggleMic()" aria-label="Toggle microphone">
+            <button class="control-btn" id="btn-mic" title="Unmute mic" aria-label="Toggle microphone">
               <i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>
             </button>
-            <button class="control-btn" id="btn-cam" title="Enable camera" onclick="VideoChat.toggleCamera()" aria-label="Toggle camera">
+            <button class="control-btn" id="btn-cam" title="Enable camera" aria-label="Toggle camera">
               <i class="fa-solid fa-video-slash" aria-hidden="true"></i>
             </button>
-            <button class="control-btn" id="btn-noise" title="Toggle noise suppression" onclick="VideoChat.toggleNoiseSuppression()" aria-label="Toggle noise suppression">
+            <button class="control-btn" id="btn-noise" title="Toggle noise suppression" aria-label="Toggle noise suppression">
               <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
             </button>
-            <button class="control-btn" id="btn-screen" title="Share screen" onclick="VideoChat.shareScreen()" aria-label="Share screen">
+            <button class="control-btn" id="btn-screen" title="Share screen" aria-label="Share screen">
               <i class="fa-solid fa-display" aria-hidden="true"></i>
             </button>
-            <button class="control-btn end-call" id="btn-end" title="End call" onclick="VideoChat.hangup()" aria-label="End call">
+            <button class="control-btn end-call" id="btn-end" title="End call" aria-label="End call">
               <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
             </button>
           </div>
@@ -207,7 +207,7 @@
               <div class="rounded-md border border-neutral-border bg-gray-50 px-3 py-3 text-center font-mono text-lg font-bold tracking-widest text-gray-900" id="my-peer-id" aria-label="Your room ID">
                 Connecting...
               </div>
-              <button class="btn btn-secondary mt-3 w-full" onclick="copyToClipboard(document.getElementById('my-peer-id').textContent, 'Room ID')" aria-label="Copy room ID to clipboard">
+              <button class="btn btn-secondary mt-3 w-full" id="btn-copy-id" aria-label="Copy room ID to clipboard">
                 <i class="fa-regular fa-copy" aria-hidden="true"></i>
                 Copy Room ID
               </button>
@@ -224,7 +224,7 @@
             <div class="card-body">
               <label class="form-label" for="remote-id">Remote Room ID</label>
               <input type="text" class="form-input" id="remote-id" placeholder="Enter Room ID..." autocomplete="off" aria-label="Remote room ID" />
-              <button class="btn btn-primary mt-3 w-full" id="btn-call" onclick="VideoChat.callPeer(document.getElementById('remote-id').value.trim())" aria-label="Connect to room">
+              <button class="btn btn-primary mt-3 w-full" id="btn-call" aria-label="Connect to room">
                 <i class="fa-solid fa-lock" aria-hidden="true"></i>
                 Connect Securely
               </button>

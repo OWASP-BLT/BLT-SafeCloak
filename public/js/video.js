@@ -98,7 +98,6 @@ const VideoChat = (() => {
   function showCameraDenied() {
     const denied = $('camera-denied');
     const instructions = $('camera-denied-instructions');
-    const mainGrid = $('main-grid');
     const permAlert = $('perm-alert');
     if (instructions) instructions.innerHTML = getCameraInstructions(detectBrowser());
     
@@ -119,6 +118,8 @@ const VideoChat = (() => {
     if (permAlert) permAlert.style.display = 'none';
     const retryBtn = $('btn-camera-retry');
     if (retryBtn) {
+      // Use named handler to ensure we don't stack listeners if using addEventListener
+      // but here we just reset onclick for simplicity and idempotency
       retryBtn.onclick = () => {
         if (deniedTimeout) {
           clearTimeout(deniedTimeout);
@@ -126,7 +127,7 @@ const VideoChat = (() => {
         }
         if (denied) denied.style.display = 'none';
         if (permAlert) permAlert.style.display = 'block';
-        toggleCamera(); // Retry media acquisition
+        void toggleCamera(); // Explicitly retry media acquisition
       };
     }
   }
@@ -224,13 +225,14 @@ const VideoChat = (() => {
           pendingDataConn = conn;
           return;
         }
-        // Keep one pending connection until consent/call resolution.
-        if (pendingDataConn.peer !== conn.peer) {
-          conn.close();
+        // If a new connection comes from the same peer, replace the old one (closing it first)
+        if (pendingDataConn.peer === conn.peer) {
+          pendingDataConn.close();
+          pendingDataConn = conn;
           return;
         }
-        pendingDataConn.close();
-        pendingDataConn = conn;
+        // Reject connections from others if we already have a pending one
+        conn.close();
         return;
       }
       if (conn.peer !== currentCall.peer) {
@@ -331,7 +333,8 @@ const VideoChat = (() => {
       return;
     }
     const videoTracks = remoteStream.getVideoTracks();
-    const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted && track.enabled);
+    // Use !track.muted (spec-defined for remote tracks) instead of .enabled
+    const hasActiveVideo = videoTracks.some(track => track.readyState === 'live' && !track.muted);
     if (hasActiveVideo) {
       remotePlaceholder.classList.add('hidden');
     } else {
@@ -557,6 +560,7 @@ const VideoChat = (() => {
       activeScreenTrack = null;
     }
     screenSharing = false;
+    shareScreenInFlight = false;
     $('btn-screen') && $('btn-screen').classList.remove('active');
     const localVideo = $('local-video');
     if (localVideo && localStream) localVideo.srcObject = localStream;
@@ -703,8 +707,44 @@ const VideoChat = (() => {
     showToast('Screen sharing stopped', 'info');
   }
 
+  function initEventListeners() {
+    const btnMic = $('btn-mic');
+    if (btnMic) btnMic.onclick = () => toggleMic().catch(e => showToast('Mic error: ' + e.message, 'error'));
+
+    const btnCam = $('btn-cam');
+    if (btnCam) btnCam.onclick = () => toggleCamera().catch(e => showToast('Camera error: ' + e.message, 'error'));
+
+    const btnNoise = $('btn-noise');
+    if (btnNoise) btnNoise.onclick = () => toggleNoiseSuppression().catch(e => showToast('Suppression error: ' + e.message, 'error'));
+
+    const btnScreen = $('btn-screen');
+    if (btnScreen) btnScreen.onclick = () => shareScreen().catch(e => showToast('Share error: ' + e.message, 'error'));
+
+    const btnEnd = $('btn-end');
+    if (btnEnd) btnEnd.onclick = () => hangup();
+
+    const btnCopy = $('btn-copy-id');
+    if (btnCopy) {
+      btnCopy.onclick = () => {
+        const id = $('my-peer-id');
+        if (id && id.textContent !== 'Connecting...') {
+          copyToClipboard(id.textContent, 'Room ID');
+        }
+      };
+    }
+
+    const btnCall = $('btn-call');
+    if (btnCall) {
+      btnCall.onclick = () => {
+        const id = $('remote-id');
+        if (id) callPeer(id.value.trim());
+      };
+    }
+  }
+
   /* ── Init ── */
   async function init() {
+    initEventListeners();
     const ok = await startLocalMedia();
     if (ok) await initPeer();
   }
