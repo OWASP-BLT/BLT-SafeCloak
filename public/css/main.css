@@ -165,6 +165,7 @@ body {
     position: absolute;
     left: 0.65rem;
     bottom: 0.65rem;
+    z-index: 12;
 }
 
 .video-placeholder {
@@ -179,9 +180,7 @@ body {
     z-index: 10;
 }
 
-.video-label {
-    z-index: 12;
-}
+
 
 .video-placeholder.hidden {
     display: none;
