@@ -6,6 +6,7 @@
 const VideoChat = (() => {
   let peer = null;
   let localStream = null;
+  let voiceStream = null; /* localStream video + processed audio for WebRTC */
   let currentCall = null;
   let audioContext = null;
   let analyser = null;
@@ -105,6 +106,18 @@ const VideoChat = (() => {
         localVideo.srcObject = localStream;
         localVideo.muted = true;
       }
+
+      /* Build a separate stream for WebRTC: original video + voice-changed audio */
+      if (typeof VoiceChanger !== "undefined") {
+        const processedAudio = VoiceChanger.init(localStream);
+        const videoTrack = localStream.getVideoTracks()[0];
+        const audioTrack = processedAudio.getAudioTracks()[0];
+        const tracks = [videoTrack, audioTrack].filter(Boolean);
+        voiceStream = tracks.length ? new MediaStream(tracks) : localStream;
+      } else {
+        voiceStream = localStream;
+      }
+
       startVoiceMeter(localStream);
       return true;
     } catch (err) {
@@ -184,7 +197,7 @@ const VideoChat = (() => {
         }
       }
       currentCall = incomingCall;
-      incomingCall.answer(localStream);
+      incomingCall.answer(voiceStream || localStream);
       handleCallStream(incomingCall);
     });
 
@@ -246,7 +259,7 @@ const VideoChat = (() => {
 
     updateStatus("Calling…", "warning");
     setDotStatus("connecting");
-    const call = peer.call(remotePeerId, localStream);
+    const call = peer.call(remotePeerId, voiceStream || localStream);
     currentCall = call;
     handleCallStream(call);
   }
@@ -309,8 +322,10 @@ const VideoChat = (() => {
       localStream.getTracks().forEach((t) => t.stop());
       localStream = null;
     }
+    voiceStream = null;
     if (voiceAnimFrame) cancelAnimationFrame(voiceAnimFrame);
     if (audioContext) audioContext.close();
+    if (typeof VoiceChanger !== "undefined") VoiceChanger.destroy();
     setDotStatus("offline");
     updateStatus("Disconnected", "muted");
     showToast("Session ended and media released", "success");
@@ -335,6 +350,42 @@ const VideoChat = (() => {
     } catch {
       showToast("Noise suppression not supported on this device", "warning");
     }
+  }
+
+  /* ── Voice changer ── */
+  function setVoiceMode(mode) {
+    if (typeof VoiceChanger === "undefined") return;
+    VoiceChanger.setMode(mode);
+
+    /* If there is an active call, swap the audio sender track live */
+    if (currentCall && currentCall.peerConnection) {
+      const newTrack =
+        VoiceChanger.getProcessedStream() && VoiceChanger.getProcessedStream().getAudioTracks()[0];
+      if (newTrack) {
+        const sender = currentCall.peerConnection
+          .getSenders()
+          .find((s) => s.track && s.track.kind === "audio");
+        if (sender) sender.replaceTrack(newTrack);
+      }
+    }
+
+    /* Update button states */
+    document.querySelectorAll("[data-voice-mode]").forEach((btn) => {
+      const isActive = btn.dataset.voiceMode === mode;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", String(isActive));
+    });
+
+    const modeName = VoiceChanger.getModes()[mode] ? VoiceChanger.getModes()[mode].label : mode;
+    showToast(`Voice effect: ${modeName}`, "info");
+  }
+
+  function toggleVoiceEffectsPanel() {
+    const panel = $("voice-effects-panel");
+    const btn = $("btn-voice-changer");
+    if (!panel) return;
+    const isHidden = panel.classList.toggle("hidden");
+    if (btn) btn.setAttribute("aria-expanded", isHidden ? "false" : "true");
   }
 
   /* ── Consent gate ── */
@@ -432,6 +483,8 @@ const VideoChat = (() => {
     endCall,
     hangup,
     toggleNoiseSuppression,
+    setVoiceMode,
+    toggleVoiceEffectsPanel,
     shareScreen,
     stopScreenShare,
     state,
