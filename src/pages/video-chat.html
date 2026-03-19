@@ -101,6 +101,7 @@
         <p class="mt-1 text-sm text-gray-600">Choose whether to create or join a room.</p>
       </div>
     </header>
+    </div>
 <div class="min-h-screen bg-pink-50/30 p-8 font-sans text-gray-700">
   <div class="mx-auto max-w-4xl">
     
@@ -110,8 +111,8 @@
       <!-- Start a Chat Card -->
       <div class="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-100">
         <div class="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-red-600 text-white shadow-lg">
-          <svg xmlns="http://www.w3.org" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">  
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
         <h2 class="mb-2 text-2xl font-bold">Start a Chat</h2>
@@ -124,8 +125,8 @@
       <!-- Join a Chat Card -->
       <div class="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-100">
         <div class="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-pink-50 text-red-500">
-          <svg xmlns="http://www.w3.org" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"> 
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </div>
         <h2 class="mb-2 text-2xl font-bold">Join a Chat</h2>
@@ -133,9 +134,9 @@
         
         <div class="flex gap-2">
           <input type="text" id="join-id" placeholder="ENTER ROOM ID..." class="w-full rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium tracking-wider outline-none ring-1 ring-gray-100 focus:ring-2 focus:ring-red-500/20" />
-          <button id="btn-join" onclick="VideoChat.callPeer(document.getElementById('join-id').value.trim())" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
-            Join
-          </button>
+          <button id="btn-join" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
+             Join
+           </button>
         </div>
       </div>
     </div>
