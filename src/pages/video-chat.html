@@ -131,13 +131,13 @@
         </div>
         <h2 class="mb-2 text-2xl font-bold">Join a Chat</h2>
         <p class="mb-8 text-gray-400">Enter the Room ID shared by your host to join their secure video room.</p>
-        
-        <div class="flex gap-2">
-          <input type="text" id="join-id" placeholder="ENTER ROOM ID..." class="w-full rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium tracking-wider outline-none ring-1 ring-gray-100 focus:ring-2 focus:ring-red-500/20" />
-          <button id="btn-join" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
-             Join
+       <form id="join-form" class="flex gap-2">
+          <label for="join-id" class="sr-only">Room ID</label>
+          <input type="text" id="join-id" required placeholder="ENTER ROOM ID..." class="w-full rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium tracking-wider outline-none ring-1 ring-gray-100 focus:ring-2 focus:ring-red-500/20" />
+          <button type="submit" id="btn-join" class="rounded-xl bg-red-400 px-6 py-3 font-semibold text-white transition hover:bg-red-500">
+                Join
            </button>
-        </div>
+       </form>
       </div>
     </div>
 
@@ -174,11 +174,10 @@
     document.getElementById('btn-create').addEventListener('click', () => {
       window.location.href = 'in-call.html';
     });
-    document.getElementById('btn-join').addEventListener('click', () => {
+    document.getElementById('join-form').addEventListener('submit', (e) => {
+      e.preventDefault();
       const id = document.getElementById('join-id').value.trim();
-      if (id) {
-        window.location.href = 'in-call.html?room=' + encodeURIComponent(id);
-      }
+     window.location.href = 'in-call.html?room=' + encodeURIComponent(id);
     });
     document.getElementById('join-id').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') document.getElementById('btn-join').click();
