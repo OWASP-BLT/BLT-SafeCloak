@@ -22,6 +22,15 @@ const VideoChat = (() => {
     sessionKey: null,
   };
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   /* ── DOM helpers ── */
   const $ = (id) => document.getElementById(id);
 
@@ -340,13 +349,14 @@ const VideoChat = (() => {
   /* ── Consent gate ── */
   function askConsent(callerName) {
     return new Promise((resolve) => {
+      const safeCallerName = escapeHtml(callerName || "Unknown participant");
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay";
       overlay.style.display = "flex";
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3>🔒 Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong style="color:#fff">${callerName}</strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong style="color:#fff">${safeCallerName}</strong>?</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <span>ℹ️</span>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
