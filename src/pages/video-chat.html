@@ -254,6 +254,82 @@
               </button>
             </div>
 
+            <!-- Reaction bar (visible when in a call) -->
+            <div
+              class="reaction-bar hidden"
+              id="reaction-bar"
+              role="toolbar"
+              aria-label="Send a reaction"
+            >
+              <span class="text-xs font-bold uppercase tracking-wide text-gray-500 mr-1"
+                >React</span
+              >
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('👍')"
+                title="Thumbs up"
+                aria-label="Send thumbs up reaction"
+              >
+                👍
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('❤️')"
+                title="Heart"
+                aria-label="Send heart reaction"
+              >
+                ❤️
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('😂')"
+                title="Laughing"
+                aria-label="Send laughing reaction"
+              >
+                😂
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('😮')"
+                title="Wow"
+                aria-label="Send wow reaction"
+              >
+                😮
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('👏')"
+                title="Clapping"
+                aria-label="Send clapping reaction"
+              >
+                👏
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('🔥')"
+                title="Fire"
+                aria-label="Send fire reaction"
+              >
+                🔥
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('🎉')"
+                title="Party"
+                aria-label="Send party reaction"
+              >
+                🎉
+              </button>
+              <button
+                class="reaction-btn"
+                onclick="VideoChat.sendReaction('😢')"
+                title="Sad"
+                aria-label="Send sad reaction"
+              >
+                😢
+              </button>
+            </div>
+
             <div class="card mt-4" aria-label="Voice activity meter">
               <div class="card-body flex flex-wrap items-center gap-3">
                 <span class="text-xs font-bold uppercase tracking-wide text-gray-500"
@@ -361,6 +437,46 @@
               </div>
               <div class="card-body" id="participants-list">
                 <p class="text-sm text-gray-500 text-center py-2">No participants connected</p>
+              </div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">
+                  <i class="fa-solid fa-comments text-primary" aria-hidden="true"></i>
+                  Chat
+                </h2>
+              </div>
+              <div
+                class="chat-messages"
+                id="chat-messages"
+                aria-live="polite"
+                aria-label="Chat messages"
+              >
+                <div class="chat-msg system">
+                  <div class="chat-msg-bubble">Connect to a participant to start chatting.</div>
+                </div>
+              </div>
+              <div class="chat-input-area">
+                <input
+                  type="text"
+                  class="chat-input"
+                  id="chat-input"
+                  placeholder="Type a message…"
+                  autocomplete="off"
+                  aria-label="Chat message"
+                  maxlength="500"
+                  onkeydown="if (event.key === 'Enter') VideoChat.sendChatMessage();"
+                />
+                <button
+                  class="chat-send-btn"
+                  onclick="VideoChat.sendChatMessage()"
+                  aria-label="Send chat message"
+                  title="Send message"
+                >
+                  <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                </button>
               </div>
             </div>
 

@@ -14,6 +14,7 @@ const VideoChat = (() => {
   let camOff = false;
   let consentGiven = false;
   let screenSharing = false;
+  const dataConnections = new Map(); // peerId -> DataConnection
 
   const state = {
     peerId: null,
@@ -287,6 +288,10 @@ const VideoChat = (() => {
       updateStatus("Disconnected", "warning");
       setDotStatus("offline");
     });
+
+    peer.on("connection", (dataConn) => {
+      setupDataConnection(dataConn);
+    });
   }
 
   function updateParticipantsList() {
@@ -384,6 +389,7 @@ const VideoChat = (() => {
       );
       setDotStatus("online");
       $("call-controls") && $("call-controls").classList.remove("hidden");
+      $("reaction-bar") && $("reaction-bar").classList.remove("hidden");
       updateParticipantsList();
     });
 
@@ -442,6 +448,11 @@ const VideoChat = (() => {
     setDotStatus("connecting");
     const call = peer.call(remotePeerId, localStream);
     activeCalls.set(remotePeerId, call);
+
+    // Establish data channel for chat and reactions
+    const dataConn = peer.connect(remotePeerId);
+    setupDataConnection(dataConn);
+
     updateParticipantsList();
     handleCallStream(call);
   }
@@ -478,11 +489,17 @@ const VideoChat = (() => {
     if (call) {
       call.close();
     }
+    const dataConn = dataConnections.get(peerId);
+    if (dataConn) {
+      dataConn.close();
+    }
   }
 
   function endCall() {
     activeCalls.forEach((call) => call.close());
     activeCalls.clear();
+    dataConnections.forEach((conn) => conn.close());
+    dataConnections.clear();
     state.connected = false;
     updateStatus("Call ended", "muted");
     setDotStatus("offline");
@@ -491,6 +508,7 @@ const VideoChat = (() => {
       videoGrid.querySelectorAll(".video-wrapper:not(:first-child)").forEach((w) => w.remove());
     }
     $("call-controls") && $("call-controls").classList.add("hidden");
+    $("reaction-bar") && $("reaction-bar").classList.add("hidden");
     updateParticipantsList();
     showToast("Call ended", "info");
     // Record consent end
@@ -636,6 +654,106 @@ const VideoChat = (() => {
     showToast("Screen sharing stopped", "info");
   }
 
+  /* ── Data channels (chat + reactions) ── */
+  function setupDataConnection(conn) {
+    conn.on("open", () => {
+      dataConnections.set(conn.peer, conn);
+      addChatMessage("", `${conn.peer} joined the chat`, null, false, true);
+    });
+    conn.on("data", (data) => {
+      if (!data || typeof data !== "object") return;
+      handleDataMessage(data, conn.peer);
+    });
+    conn.on("close", () => {
+      dataConnections.delete(conn.peer);
+      addChatMessage("", `${conn.peer} left the chat`, null, false, true);
+    });
+    conn.on("error", () => {
+      dataConnections.delete(conn.peer);
+    });
+  }
+
+  function handleDataMessage(data, fromPeerId) {
+    if (data.type === "reaction") {
+      showReaction(data.emoji);
+    } else if (data.type === "chat") {
+      addChatMessage(fromPeerId, data.text, data.time);
+    }
+  }
+
+  function sendToAll(data) {
+    dataConnections.forEach((conn) => {
+      if (conn.open) conn.send(data);
+    });
+  }
+
+  function sendReaction(emoji) {
+    if (!emoji) return;
+    showReaction(emoji);
+    sendToAll({ type: "reaction", emoji });
+  }
+
+  function showReaction(emoji) {
+    const el = document.createElement("div");
+    el.className = "reaction-float";
+    el.textContent = emoji;
+    el.style.left = `${10 + Math.random() * 75}%`; // 10%–85% of viewport width
+    document.body.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+  }
+
+  function sendChatMessage() {
+    const input = $("chat-input");
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    addChatMessage("You", text, time, true);
+    sendToAll({ type: "chat", text, time });
+  }
+
+  function addChatMessage(fromId, text, time, isSelf = false, isSystem = false) {
+    const container = $("chat-messages");
+    if (!container) return;
+
+    // Remove the initial placeholder on first real message
+    if (!isSystem) {
+      const placeholder = container.querySelector(".chat-msg.system");
+      if (placeholder) placeholder.remove();
+    }
+
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `chat-msg${isSelf ? " self" : ""}${isSystem ? " system" : ""}`;
+
+    if (!isSystem) {
+      const header = document.createElement("div");
+      header.className = "chat-msg-header";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "font-mono font-bold truncate max-w-[100px]";
+      nameSpan.title = fromId;
+      nameSpan.textContent = fromId;
+      header.appendChild(nameSpan);
+
+      if (time) {
+        const timeSpan = document.createElement("span");
+        timeSpan.textContent = time;
+        header.appendChild(timeSpan);
+      }
+
+      msgDiv.appendChild(header);
+    }
+
+    const bubble = document.createElement("div");
+    bubble.className = "chat-msg-bubble";
+    bubble.textContent = text;
+    msgDiv.appendChild(bubble);
+
+    container.appendChild(msgDiv);
+    container.scrollTop = container.scrollHeight;
+  }
+
   /* ── Init ── */
   async function init() {
     const ok = await startLocalMedia();
@@ -654,6 +772,8 @@ const VideoChat = (() => {
     shareScreen,
     stopScreenShare,
     copyRoomLink,
+    sendReaction,
+    sendChatMessage,
     state,
   };
 })();
