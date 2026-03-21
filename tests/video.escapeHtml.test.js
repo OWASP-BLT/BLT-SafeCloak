@@ -5,8 +5,10 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 test("escapeHtml encodes dangerous characters in caller names", () => {
+  const uiPath = path.resolve(__dirname, "../public/js/ui.js");
   const videoPath = path.resolve(__dirname, "../public/js/video.js");
-  const source = fs.readFileSync(videoPath, "utf8");
+  const uiSource = fs.readFileSync(uiPath, "utf8");
+  const videoSource = fs.readFileSync(videoPath, "utf8");
 
   const context = {
     console,
@@ -14,13 +16,17 @@ test("escapeHtml encodes dangerous characters in caller names", () => {
     TextDecoder,
     setTimeout,
     clearTimeout,
+    document: {
+      addEventListener: () => {},
+    },
   };
   context.globalThis = context;
 
   vm.createContext(context);
-  vm.runInContext(`${source}\nglobalThis.__VideoChat__ = VideoChat;`, context);
+  vm.runInContext(uiSource, context);
+  vm.runInContext(videoSource, context);
 
-  const escapeHtml = context.__VideoChat__.__test.escapeHtml;
+  const escapeHtml = context.escapeHtml;
   const input = `<img src=x onerror="alert('xss')">&`;
   const output = escapeHtml(input);
 

@@ -22,15 +22,6 @@ const VideoChat = (() => {
     sessionKey: null,
   };
 
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
   /* ── DOM helpers ── */
   const $ = (id) => document.getElementById(id);
 
@@ -446,8 +437,5 @@ const VideoChat = (() => {
     shareScreen,
     stopScreenShare,
     state,
-    __test: {
-      escapeHtml,
-    },
   };
 })();
