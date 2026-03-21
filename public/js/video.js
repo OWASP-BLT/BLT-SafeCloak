@@ -200,7 +200,19 @@ const VideoChat = (() => {
     });
   }
 
+  /* ── Secure calls counter ── */
+  function incrementSecureCallsCount() {
+    try {
+      const key = "safecloak_secure_calls";
+      const count = parseInt(localStorage.getItem(key) || "0", 10) + 1;
+      localStorage.setItem(key, count.toString());
+    } catch {
+      /* localStorage not available */
+    }
+  }
+
   function handleCallStream(call) {
+    let callCounted = false;
     call.on("stream", (remoteStream) => {
       const remoteVideo = $("remote-video");
       if (remoteVideo) {
@@ -210,6 +222,10 @@ const VideoChat = (() => {
       updateStatus("🔒 Encrypted call active", "success");
       setDotStatus("online");
       $("call-controls") && $("call-controls").classList.remove("hidden");
+      if (!callCounted) {
+        callCounted = true;
+        incrementSecureCallsCount();
+      }
     });
 
     call.on("close", () => {

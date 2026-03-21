@@ -200,7 +200,7 @@
 
       <!-- Stats -->
       <section class="px-4 pb-10 sm:px-6 lg:px-8">
-        <div class="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <div class="surface-card rounded-xl p-5 text-center">
             <p class="text-3xl font-extrabold text-primary">256</p>
             <p class="mt-1 text-sm font-semibold text-gray-600">Bit AES Encryption</p>
@@ -216,6 +216,10 @@
           <div class="surface-card rounded-xl p-5 text-center">
             <p class="text-3xl font-extrabold text-primary">100%</p>
             <p class="mt-1 text-sm font-semibold text-gray-600">OWASP Best Practices</p>
+          </div>
+          <div class="surface-card rounded-xl p-5 text-center">
+            <p class="text-3xl font-extrabold text-primary" id="stat-secure-calls">0</p>
+            <p class="mt-1 text-sm font-semibold text-gray-600">Secure Calls Made</p>
           </div>
         </div>
       </section>
@@ -602,6 +606,17 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {
+        // Load secure calls count from localStorage
+        const secureCallsEl = document.getElementById("stat-secure-calls");
+        if (secureCallsEl) {
+          try {
+            const count = parseInt(localStorage.getItem("safecloak_secure_calls") || "0", 10);
+            secureCallsEl.textContent = count;
+          } catch {
+            /* localStorage not available */
+          }
+        }
+
         const searchInput = document.getElementById("feature-search");
         const cards = Array.from(document.querySelectorAll("[data-feature-card]"));
         const emptyState = document.getElementById("feature-empty");
