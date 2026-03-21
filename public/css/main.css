@@ -227,6 +227,89 @@ body {
   padding: 1rem;
 }
 
+/* === Live Transcript Panel === */
+.transcript-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.transcript-placeholder {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 0.75rem 0;
+}
+
+.transcript-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-width: 80%;
+  animation: transcript-fade-in 0.2s ease;
+}
+
+.transcript-entry.transcript-local {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.transcript-entry.transcript-remote {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.transcript-speaker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.transcript-local .transcript-speaker {
+  color: var(--blt-primary);
+}
+
+.transcript-entry .transcript-text {
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #111827;
+  word-break: break-word;
+}
+
+.transcript-local .transcript-text {
+  background: #feeae9;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.transcript-remote .transcript-text {
+  background: #f1f5f9;
+  border-bottom-left-radius: 0.25rem;
+}
+
+.transcript-interim .transcript-text {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+@keyframes transcript-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ============================================
    NOTES PAGE STYLES
    ============================================ */

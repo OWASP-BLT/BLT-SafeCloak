@@ -14,6 +14,9 @@ const VideoChat = (() => {
   let camOff = false;
   let consentGiven = false;
   let screenSharing = false;
+  let dataConnection = null;
+  let transcriptRunning = false;
+  const interimEntries = {};
 
   const state = {
     peerId: null,
@@ -188,6 +191,10 @@ const VideoChat = (() => {
       handleCallStream(incomingCall);
     });
 
+    peer.on("connection", (conn) => {
+      setupDataConnection(conn);
+    });
+
     peer.on("error", (err) => {
       updateStatus("Error: " + err.message, "danger");
       setDotStatus("offline");
@@ -210,6 +217,9 @@ const VideoChat = (() => {
       updateStatus("🔒 Encrypted call active", "success");
       setDotStatus("online");
       $("call-controls") && $("call-controls").classList.remove("hidden");
+      startTranscription();
+      const panel = $("transcript-panel");
+      if (panel) panel.style.display = "";
     });
 
     call.on("close", () => {
@@ -249,6 +259,10 @@ const VideoChat = (() => {
     const call = peer.call(remotePeerId, localStream);
     currentCall = call;
     handleCallStream(call);
+
+    /* Open a data channel to exchange transcription text */
+    const conn = peer.connect(remotePeerId, { reliable: true, serialization: "json" });
+    setupDataConnection(conn);
   }
 
   /* ── Controls ── */
@@ -278,11 +292,147 @@ const VideoChat = (() => {
     showToast(camOff ? "Camera disabled" : "Camera enabled", "info");
   }
 
+  /* ── Data channel (transcription distribution) ── */
+  function setupDataConnection(conn) {
+    dataConnection = conn;
+
+    conn.on("data", (data) => {
+      if (data && data.type === "transcript") {
+        addTranscriptEntry("Remote", data.text, data.isFinal);
+      }
+    });
+
+    conn.on("close", () => {
+      if (dataConnection === conn) dataConnection = null;
+    });
+
+    conn.on("error", () => {
+      if (dataConnection === conn) dataConnection = null;
+    });
+  }
+
+  /* ── Transcription ── */
+  function startTranscription() {
+    if (typeof Transcription === "undefined") return;
+
+    const supported = Transcription.isWebSpeechSupported();
+
+    if (!supported && !localStream) {
+      showToast("Live transcription not supported in this browser", "warning");
+      updateTranscriptStatus("Not supported");
+      return;
+    }
+
+    const started = Transcription.start(
+      (result) => {
+        addTranscriptEntry("You", result.text, result.isFinal);
+        if (dataConnection && dataConnection.open) {
+          dataConnection.send({ type: "transcript", text: result.text, isFinal: result.isFinal });
+        }
+      },
+      { stream: localStream }
+    );
+
+    if (started) {
+      transcriptRunning = true;
+      updateTranscriptStatus(supported ? "Listening…" : "Cloudflare AI…");
+    } else {
+      showToast("Could not start live transcription", "warning");
+    }
+  }
+
+  function stopTranscription() {
+    transcriptRunning = false;
+    if (typeof Transcription !== "undefined") Transcription.stop();
+    updateTranscriptStatus("Off");
+  }
+
+  function updateTranscriptStatus(text) {
+    const el = $("transcript-status");
+    if (el) el.textContent = text;
+  }
+
+  function addTranscriptEntry(speaker, text, isFinal) {
+    const container = $("transcript-messages");
+    if (!container) return;
+
+    /* Remove placeholder text on first entry */
+    const placeholder = container.querySelector(".transcript-placeholder");
+    if (placeholder) placeholder.remove();
+
+    if (!isFinal) {
+      if (interimEntries[speaker]) {
+        interimEntries[speaker].querySelector(".transcript-text").textContent = text;
+      } else {
+        const entry = createTranscriptEntry(speaker, text, true);
+        container.appendChild(entry);
+        interimEntries[speaker] = entry;
+      }
+    } else {
+      if (interimEntries[speaker]) {
+        interimEntries[speaker].querySelector(".transcript-text").textContent = text;
+        interimEntries[speaker].classList.remove("transcript-interim");
+        interimEntries[speaker] = null;
+      } else {
+        container.appendChild(createTranscriptEntry(speaker, text, false));
+      }
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function createTranscriptEntry(speaker, text, isInterim) {
+    const isLocal = speaker === "You";
+    const entry = document.createElement("div");
+    entry.className =
+      "transcript-entry " +
+      (isLocal ? "transcript-local" : "transcript-remote") +
+      (isInterim ? " transcript-interim" : "");
+    const speakerSpan = document.createElement("span");
+    speakerSpan.className = "transcript-speaker";
+    speakerSpan.textContent = speaker;
+    const textSpan = document.createElement("span");
+    textSpan.className = "transcript-text";
+    textSpan.textContent = text;
+    entry.appendChild(speakerSpan);
+    entry.appendChild(textSpan);
+    return entry;
+  }
+
+  function toggleTranscript() {
+    const panel = $("transcript-panel");
+    if (!panel) return;
+    const isHidden = panel.style.display === "none";
+    panel.style.display = isHidden ? "" : "none";
+    const btn = $("btn-transcript");
+    if (btn) btn.classList.toggle("active", isHidden);
+    showToast(isHidden ? "Transcript shown" : "Transcript hidden", "info");
+  }
+
+  function clearTranscript() {
+    const container = $("transcript-messages");
+    if (!container) return;
+    const placeholder = document.createElement("p");
+    placeholder.className = "transcript-placeholder";
+    placeholder.textContent = "Transcript will appear here once the call is active.";
+    container.innerHTML = "";
+    container.appendChild(placeholder);
+    interimEntries["You"] = null;
+    interimEntries["Remote"] = null;
+  }
+
   function endCall() {
     if (currentCall) {
       currentCall.close();
       currentCall = null;
     }
+    stopTranscription();
+    if (dataConnection) {
+      dataConnection.close();
+      dataConnection = null;
+    }
+    const panel = $("transcript-panel");
+    if (panel) panel.style.display = "none";
     state.connected = false;
     updateStatus("Call ended", "muted");
     setDotStatus("offline");
@@ -434,6 +584,8 @@ const VideoChat = (() => {
     toggleNoiseSuppression,
     shareScreen,
     stopScreenShare,
+    toggleTranscript,
+    clearTranscript,
     state,
   };
 })();

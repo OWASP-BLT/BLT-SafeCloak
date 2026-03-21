@@ -6,5 +6,8 @@ compatibility_flags = ["python_workers"]
 [assets]
 directory = "./public"
 
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true

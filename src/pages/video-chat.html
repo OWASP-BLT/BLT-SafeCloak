@@ -255,6 +255,15 @@
                 <i class="fa-solid fa-display" aria-hidden="true"></i>
               </button>
               <button
+                class="control-btn"
+                id="btn-transcript"
+                title="Toggle live transcript"
+                onclick="VideoChat.toggleTranscript()"
+                aria-label="Toggle live transcript"
+              >
+                <i class="fa-solid fa-closed-captioning" aria-hidden="true"></i>
+              </button>
+              <button
                 class="control-btn end-call"
                 id="btn-end"
                 title="End call"
@@ -286,6 +295,53 @@
                   >
                   <span class="badge badge-success">Echo Cancel</span>
                   <span class="badge badge-primary">Auto Gain</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Live Transcript Panel ── -->
+            <div
+              class="card mt-4"
+              id="transcript-panel"
+              style="display: none"
+              aria-label="Live transcript"
+            >
+              <div
+                class="card-header"
+                style="display: flex; align-items: center; justify-content: space-between"
+              >
+                <h2 class="card-title">
+                  <i class="fa-solid fa-closed-captioning text-primary" aria-hidden="true"></i>
+                  Live Transcript
+                </h2>
+                <div style="display: flex; align-items: center; gap: 0.5rem">
+                  <span
+                    class="text-xs font-medium text-gray-400"
+                    id="transcript-status"
+                    aria-live="polite"
+                    >Listening…</span
+                  >
+                  <button
+                    class="btn btn-secondary"
+                    style="font-size: 0.75rem; padding: 0.25rem 0.75rem; min-height: 0"
+                    onclick="VideoChat.clearTranscript()"
+                    aria-label="Clear transcript"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div class="card-body" style="padding: 0">
+                <div
+                  class="transcript-messages"
+                  id="transcript-messages"
+                  role="log"
+                  aria-live="polite"
+                  aria-label="Live conversation transcript"
+                >
+                  <p class="transcript-placeholder">
+                    Transcript will appear here once the call is active.
+                  </p>
                 </div>
               </div>
             </div>
@@ -419,6 +475,7 @@
     <script src="js/crypto.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/consent.js"></script>
+    <script src="js/transcription.js"></script>
     <script src="js/video.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async () => {
