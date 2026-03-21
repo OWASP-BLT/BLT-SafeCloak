@@ -24,10 +24,5 @@ test("escapeHtml encodes dangerous characters in caller names", () => {
   const input = `<img src=x onerror="alert('xss')">&`;
   const output = escapeHtml(input);
 
-  assert.equal(output.includes("<"), false);
-  assert.equal(output.includes(">"), false);
-  assert.equal(output.includes('"'), false);
-  assert.equal(output.includes("'"), false);
-  assert.equal(output.includes("&lt;img"), true);
-  assert.equal(output.includes("&amp;"), true);
+  assert.equal(output, "&lt;img src=x onerror=&quot;alert(&#39;xss&#39;)&quot;&gt;&amp;");
 });

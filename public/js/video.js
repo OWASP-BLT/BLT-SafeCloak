@@ -349,7 +349,8 @@ const VideoChat = (() => {
   /* ── Consent gate ── */
   function askConsent(callerName) {
     return new Promise((resolve) => {
-      const safeCallerName = escapeHtml(callerName || "Unknown participant");
+      const displayCallerName = callerName || "Unknown participant";
+      const safeCallerName = escapeHtml(displayCallerName);
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay";
       overlay.style.display = "flex";
@@ -375,7 +376,7 @@ const VideoChat = (() => {
         ConsentManager &&
           ConsentManager.record({
             type: "given",
-            name: `Consent given for call with ${callerName}`,
+            name: `Consent given for call with ${displayCallerName}`,
             details: `Session ID: ${state.sessionId}`,
           });
         resolve(true);
