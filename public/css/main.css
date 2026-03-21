@@ -422,6 +422,17 @@ body {
   background: #b91c1c;
 }
 
+/* === Reduced Motion === */
+@media (prefers-reduced-motion: reduce) {
+  .reaction-float {
+    animation: none;
+  }
+
+  .chat-messages {
+    scroll-behavior: auto;
+  }
+}
+
 /* ============================================
    NOTES PAGE STYLES
    ============================================ */
