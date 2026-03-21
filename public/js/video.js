@@ -445,5 +445,8 @@ const VideoChat = (() => {
     shareScreen,
     stopScreenShare,
     state,
+    __test: {
+      escapeHtml,
+    },
   };
 })();
