@@ -6,15 +6,16 @@ How it works
 ------------
 1. A lightweight Python HTTP server is started locally to serve the app
    pages (src/pages/) and static assets (public/).
-2. Three separate Chromium browser instances are launched with fake
-   media flags so no real camera or microphone is required.
+2. A single Chromium browser is launched with fake media flags; three
+   isolated browser contexts are created from it so no real camera or
+   microphone is required.
 3. Client 2 connects to Client 1.  Both consent dialogs are accepted.
 4. Client 3 connects to Client 1.  Client 3's consent dialog is accepted.
    The full-mesh data channel then automatically bridges Client 3 to
    Client 2 (no extra consent needed as both already consented).
-5. The test asserts that every client ends up with exactly 3 video
-   wrappers (1 local + 2 remote) and that each remote <video> element
-   has a live srcObject attached.
+5. The test waits for each remote <video> to have a live srcObject and
+   then asserts the condition, avoiding any race between wrapper creation
+   and stream attachment.
 
 The test depends on the public PeerJS cloud server (0.peerjs.com) for
 WebRTC signalling, which is available in GitHub Actions runners.
@@ -97,12 +98,15 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
 @pytest.fixture(scope="module")
 def base_url():
     """Start a local HTTP server and return its base URL."""
-    server = socketserver.TCPServer(("127.0.0.1", 0), _AppHandler)
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _AppHandler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    yield f"http://127.0.0.1:{port}"
-    server.shutdown()
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 # ---------------------------------------------------------------------------
@@ -149,13 +153,11 @@ def test_three_clients_connect_and_see_cameras(base_url):
     other two participants' camera streams (srcObject != null).
     """
     with sync_playwright() as pw:
-        b1 = pw.chromium.launch(args=_BROWSER_ARGS)
-        b2 = pw.chromium.launch(args=_BROWSER_ARGS)
-        b3 = pw.chromium.launch(args=_BROWSER_ARGS)
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
         try:
-            ctx1 = b1.new_context(permissions=["camera", "microphone"])
-            ctx2 = b2.new_context(permissions=["camera", "microphone"])
-            ctx3 = b3.new_context(permissions=["camera", "microphone"])
+            ctx1 = browser.new_context(permissions=["camera", "microphone"])
+            ctx2 = browser.new_context(permissions=["camera", "microphone"])
+            ctx3 = browser.new_context(permissions=["camera", "microphone"])
 
             p1 = ctx1.new_page()
             p2 = ctx2.new_page()
@@ -207,17 +209,14 @@ def test_three_clients_connect_and_see_cameras(base_url):
                     timeout=TIMEOUT_MS,
                 )
 
-            # ── Step 4: Verify live camera streams ───────────────────────────
-            assert p1.evaluate(_STREAM_CHECK_JS), (
-                "Client 1 should see live streams from both other participants"
-            )
-            assert p2.evaluate(_STREAM_CHECK_JS), (
-                "Client 2 should see live streams from both other participants"
-            )
-            assert p3.evaluate(_STREAM_CHECK_JS), (
-                "Client 3 should see live streams from both other participants"
-            )
+            # ── Step 4: Wait for and verify live camera streams ──────────────
+            # `handleCallStream` creates the wrapper before stream arrives, so
+            # we must wait (not just assert) to avoid a race with srcObject
+            # assignment.
+            for page, name in ((p1, "Client 1"), (p2, "Client 2"), (p3, "Client 3")):
+                page.wait_for_function(_STREAM_CHECK_JS, timeout=TIMEOUT_MS)
+                assert page.evaluate(_STREAM_CHECK_JS), (
+                    f"{name} should see live streams from both other participants"
+                )
         finally:
-            b1.close()
-            b2.close()
-            b3.close()
+            browser.close()
