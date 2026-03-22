@@ -15,6 +15,8 @@ const VideoChat = (() => {
   let camOff = false;
   let consentGiven = false;
   let screenSharing = false;
+  let currentScreenStream = null;
+  let screenShareBusy = false;
 
   const state = {
     peerId: null,
@@ -633,8 +635,8 @@ const VideoChat = (() => {
   /* ── Screen share ── */
   async function shareScreen() {
     try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
+      currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = currentScreenStream.getVideoTracks()[0];
       for (const call of activeCalls.values()) {
         if (call.peerConnection) {
           const sender = call.peerConnection
@@ -644,7 +646,7 @@ const VideoChat = (() => {
         }
       }
       const localVideo = $("local-video");
-      if (localVideo) localVideo.srcObject = screenStream;
+      if (localVideo) localVideo.srcObject = currentScreenStream;
       showToast("Screen sharing started", "success");
       screenSharing = true;
       $("btn-screen") && $("btn-screen").classList.add("active");
@@ -657,29 +659,37 @@ const VideoChat = (() => {
   }
 
   function stopScreenShare() {
-    if (!localStream || activeCalls.size === 0) return;
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (!videoTrack) return;
-    for (const call of activeCalls.values()) {
-      const sender =
-        call.peerConnection &&
-        call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
-      if (sender) sender.replaceTrack(videoTrack);
+    if (currentScreenStream) {
+      currentScreenStream.getTracks().forEach((t) => t.stop());
+      currentScreenStream = null;
+    }
+    const videoTrack = localStream?.getVideoTracks?.()[0];
+    if (videoTrack) {
+      for (const call of activeCalls.values()) {
+        const sender =
+          call.peerConnection &&
+          call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
+        if (sender) sender.replaceTrack(videoTrack);
+      }
     }
     const localVideo = $("local-video");
-    if (localVideo) {
-      localVideo.srcObject = localStream;
-    }
+    if (localVideo && localStream) localVideo.srcObject = localStream;
     $("btn-screen") && $("btn-screen").classList.remove("active");
     screenSharing = false;
     showToast("Screen sharing stopped", "info");
   }
 
-  function toggleScreenShare() {
-    if (screenSharing) {
-      stopScreenShare();
-    } else {
-      shareScreen();
+  async function toggleScreenShare() {
+    if (screenShareBusy) return;
+    screenShareBusy = true;
+    try {
+      if (screenSharing) {
+        stopScreenShare();
+      } else {
+        await shareScreen();
+      }
+    } finally {
+      screenShareBusy = false;
     }
   }
 
