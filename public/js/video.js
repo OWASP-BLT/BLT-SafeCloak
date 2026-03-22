@@ -675,6 +675,15 @@ const VideoChat = (() => {
     showToast("Screen sharing stopped", "info");
   }
 
+  function toggleScreenShare() {
+    console.log("toggleScreenshare: ", screenSharing);
+    if (screenSharing) {
+      stopScreenShare();
+    } else {
+      shareScreen();
+    }
+  }
+
   /* ── Init ── */
   async function init() {
     const ok = await startLocalMedia();
@@ -692,6 +701,7 @@ const VideoChat = (() => {
     toggleNoiseSuppression,
     shareScreen,
     stopScreenShare,
+    toggleScreenShare,
     copyRoomLink,
     state,
   };
