@@ -2,3 +2,4 @@
 -r requirements.txt
 yapf>=0.40.0
 mypy>=1.8.0
+pywrangler
