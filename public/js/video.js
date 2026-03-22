@@ -544,6 +544,9 @@ const VideoChat = (() => {
   }
 
   function hangup() {
+    if (screenSharing || currentScreenStream) {
+      stopScreenShare();
+    }
     endCall();
     if (peer) {
       peer.disconnect();
