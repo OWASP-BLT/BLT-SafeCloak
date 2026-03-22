@@ -6,30 +6,76 @@ How it works
 ------------
 1. A lightweight Python HTTP server is started locally to serve the app
    pages (src/pages/) and static assets (public/).
-2. A single Chromium browser is launched with fake media flags; three
+2. A local PeerJS signaling server (``peerjs`` npm CLI) is started so
+   the test does not rely on the external 0.peerjs.com cloud service.
+3. The test server patches the served video-chat HTML to:
+   a. Replace the unpkg.com CDN URL for peerjs.min.js with a locally
+      cached copy (downloaded once to /tmp at module import time).
+   b. Inject a thin override that redirects ``new Peer(...)`` to the
+      local signaling server.
+4. A single Chromium browser is launched with fake media flags; three
    isolated browser contexts are created from it so no real camera or
    microphone is required.
-3. Client 2 connects to Client 1.  Both consent dialogs are accepted.
-4. Client 3 connects to Client 1.  Client 3's consent dialog is accepted.
+5. Client 2 connects to Client 1.  Both consent dialogs are accepted.
+6. Client 3 connects to Client 1.  Client 3's consent dialog is accepted.
    The full-mesh data channel then automatically bridges Client 3 to
    Client 2 (no extra consent needed as both already consented).
-5. The test waits for each remote <video> to have a live srcObject and
+7. The test waits for each remote <video> to have a live srcObject and
    then asserts the condition, avoiding any race between wrapper creation
    and stream attachment.
-
-The test depends on the public PeerJS cloud server (0.peerjs.com) for
-WebRTC signalling, which is available in GitHub Actions runners.
 """
 
 import http.server
+import re
+import socket
 import socketserver
+import subprocess
 import threading
+import time
+import urllib.request
 from pathlib import Path
 
 import pytest
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).parent.parent
+
+_PEERJS_CDN_URL = "https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"
+_PEERJS_CACHE = Path("/tmp/peerjs_test_vendor.min.js")
+_PEERJS_MIN_SIZE = 50_000  # peerjs.min.js is ~250 KB; reject obviously bad downloads
+
+# Seconds to wait for the local PeerJS server to become ready
+_PEERJS_STARTUP_TIMEOUT = 6
+
+
+def _get_peerjs_js() -> bytes:
+    """Return peerjs.min.js bytes, downloading from the CDN if not cached.
+
+    A basic size sanity-check guards against caching an empty or truncated
+    download from the CDN.
+    """
+    if _PEERJS_CACHE.exists():
+        cached = _PEERJS_CACHE.read_bytes()
+        if len(cached) >= _PEERJS_MIN_SIZE:
+            return cached
+        # Cached copy is suspiciously small – delete and re-download
+        _PEERJS_CACHE.unlink()
+    with urllib.request.urlopen(_PEERJS_CDN_URL, timeout=30) as resp:
+        data = resp.read()
+    if len(data) < _PEERJS_MIN_SIZE:
+        raise RuntimeError(
+            f"Downloaded peerjs.min.js is too small ({len(data)} bytes); "
+            "the CDN may have returned an error page."
+        )
+    _PEERJS_CACHE.write_bytes(data)
+    return data
+
+
+def _free_port() -> int:
+    """Return an unused TCP port on localhost."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 # Map clean URL paths to HTML source files
 _PAGES = {
@@ -48,7 +94,7 @@ _MIME = {
     ".ico": "image/x-icon",
 }
 
-# Generous timeout for WebRTC operations that go through an external server
+# Generous timeout for WebRTC operations (all local after patching)
 TIMEOUT_MS = 60_000
 
 # Chromium flags that enable fake camera/microphone without real hardware
@@ -59,25 +105,49 @@ _BROWSER_ARGS = [
     "--disable-setuid-sandbox",
 ]
 
+# Regex that matches the peerjs CDN <script> tag (spans multiple lines)
+_PEERJS_SCRIPT_RE = re.compile(
+    r'<script\s[^>]*src="https://unpkg\.com/peerjs[^"]*"[^>]*>.*?</script>',
+    re.DOTALL,
+)
+
 
 class _AppHandler(http.server.BaseHTTPRequestHandler):
-    """Minimal HTTP handler that serves app pages and public assets."""
+    """Minimal HTTP handler that serves app pages and public assets.
+
+    Two class-level attributes are populated by the ``base_url`` fixture
+    before the server starts:
+
+    * ``peerjs_port`` – port of the local PeerJS signaling server
+    * ``peerjs_js``   – bytes of peerjs.min.js (served at /peerjs.min.js)
+    """
+
+    peerjs_port: int = 0
+    peerjs_js: bytes = b""
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]
 
-        # Serve HTML pages
+        # Serve the locally cached peerjs.min.js
+        if path == "/peerjs.min.js":
+            self._respond(200, "application/javascript", self.__class__.peerjs_js)
+            return
+
+        # Serve HTML pages (video-chat is patched to use local signaling)
         if path in _PAGES:
             data = (ROOT / _PAGES[path]).read_bytes()
+            if path == "/video-chat":
+                data = _patch_video_chat_html(data, self.__class__.peerjs_port)
             self._respond(200, "text/html; charset=utf-8", data)
             return
 
         # Serve static files from public/
         public_root = (ROOT / "public").resolve()
-        candidate = public_root / path.lstrip("/")
-        # Ensure the path is within the public/ directory to avoid traversal
+        # Resolve the candidate to eliminate any ".." segments and follow
+        # symlinks, then confirm it still lives under public_root.
+        candidate = (public_root / path.lstrip("/")).resolve()
+        # Guard against path traversal
         try:
-            # Raises ValueError if candidate is not under public_root
             candidate.relative_to(public_root)
         except ValueError:
             self._respond(404, "text/plain", b"Not found")
@@ -101,9 +171,70 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def _patch_video_chat_html(data: bytes, peerjs_port: int) -> bytes:
+    """Rewrite video-chat HTML to use a local PeerJS server.
+
+    Replaces the unpkg.com CDN script tag with a local ``/peerjs.min.js``
+    reference, then injects a thin wrapper that overrides the ``Peer``
+    constructor to point at the local signaling server instead of
+    ``0.peerjs.com``.
+    """
+    override = (
+        '<script src="/peerjs.min.js"></script>\n'
+        "    <script>\n"
+        "    (function () {\n"
+        "      var _P = window.Peer;\n"
+        "      window.Peer = class extends _P {\n"
+        "        constructor(id, opts) {\n"
+        "          super(id, Object.assign({}, opts, {\n"
+        f"            host: '127.0.0.1', port: {peerjs_port},\n"
+        "            path: '/', secure: false, key: 'peerjs'\n"
+        "          }));\n"
+        "        }\n"
+        "      };\n"
+        "    })();\n"
+        "    </script>"
+    )
+    html = data.decode("utf-8")
+    html = _PEERJS_SCRIPT_RE.sub(override, html)
+    return html.encode("utf-8")
+
+
 @pytest.fixture(scope="module")
-def base_url():
+def peerjs_server():
+    """Start a local PeerJS signaling server and yield its port number."""
+    port = _free_port()
+    proc = subprocess.Popen(
+        ["peerjs", "--port", str(port), "--path", "/"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    # Wait until the server is ready (max ~_PEERJS_STARTUP_TIMEOUT s)
+    deadline = time.monotonic() + _PEERJS_STARTUP_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1)
+            break
+        except OSError:
+            time.sleep(0.2)
+    else:
+        proc.terminate()
+        raise RuntimeError("Local PeerJS server did not start in time")
+    try:
+        yield port
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+@pytest.fixture(scope="module")
+def base_url(peerjs_server):
     """Start a local HTTP server and return its base URL."""
+    _AppHandler.peerjs_js = _get_peerjs_js()
+    _AppHandler.peerjs_port = peerjs_server
     server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _AppHandler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)

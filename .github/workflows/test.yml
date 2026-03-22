@@ -29,5 +29,8 @@ jobs:
       - name: Install Playwright browser
         run: playwright install chromium --with-deps
 
+      - name: Install PeerJS signaling server
+        run: npm install -g peer
+
       - name: Run video chat E2E tests
         run: pytest tests/ -v --tb=short
