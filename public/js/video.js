@@ -676,7 +676,6 @@ const VideoChat = (() => {
   }
 
   function toggleScreenShare() {
-    console.log("toggleScreenshare: ", screenSharing);
     if (screenSharing) {
       stopScreenShare();
     } else {
