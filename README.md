@@ -25,8 +25,11 @@ Privacy-focused peer-to-peer communication platform built on Cloudflare Workers.
 ## Installation
 
 ```bash
-# Install Python development tools
+# Install Python development tools (includes test dependencies)
 pip install -r requirements-dev.txt
+
+# Install Playwright browser binaries
+playwright install chromium --with-deps
 ```
 
 ## Development
@@ -46,6 +49,9 @@ make typecheck
 
 # Check formatting without modifying
 make format-check
+
+# Run E2E tests (requires Playwright browser installed)
+make test
 ```
 
 The development server runs on `http://localhost:8787` with hot reload enabled.

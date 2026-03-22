@@ -3,3 +3,5 @@
 yapf>=0.40.0
 mypy>=1.8.0
 pywrangler
+playwright>=1.44.0
+pytest>=8.0.0
