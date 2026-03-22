@@ -668,11 +668,22 @@ const VideoChat = (() => {
     }
     const videoTrack = localStream?.getVideoTracks?.()[0];
     if (videoTrack) {
+      const replacePromises = [];
       for (const call of activeCalls.values()) {
         const sender =
           call.peerConnection &&
           call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
-        if (sender) sender.replaceTrack(videoTrack);
+        if (sender) {
+          replacePromises.push(sender.replaceTrack(videoTrack));
+        }
+      }
+      if (replacePromises.length) {
+        Promise.allSettled(replacePromises).then((results) => {
+          const failures = results.filter((r) => r.status === "rejected");
+          if (failures.length) {
+            console.error("Failed to restore camera track for some peers", failures);
+          }
+        });
       }
     }
     const localVideo = $("local-video");
