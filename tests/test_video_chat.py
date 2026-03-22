@@ -75,7 +75,7 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
         public_root = (ROOT / "public").resolve()
         candidate = (public_root / path.lstrip("/")).resolve()
         # Ensure the resolved path is within the public/ directory to avoid traversal
-        if public_root in candidate.parents and candidate.is_file():
+        if candidate.is_relative_to(public_root) and candidate.is_file():
             data = candidate.read_bytes()
             ct = _MIME.get(candidate.suffix, "application/octet-stream")
             self._respond(200, ct, data)
