@@ -614,14 +614,16 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3>🔒 Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong style="color:#fff">${callerName}</strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <code style="color:#E10101; font-family: monospace; font-weight: bold; background: #f9f9f9; padding: 2px 4px; border-radius: 3px;">${callerName}</code>?</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <span>ℹ️</span>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
           </div>
           <div style="display:flex;gap:0.75rem;justify-content:flex-end">
-            <button class="btn btn-secondary" id="consent-deny">Decline</button>
-            <button class="btn btn-primary" id="consent-allow">I Consent</button>
+          <button class="border border-red-600 text-red-600 px-6 py-2 rounded-md hover:bg-red-600 hover:text-white" id="consent-deny">Decline</button>
+          <button class="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700" id="consent-allow">I Consent</button>
+          
+            
           </div>
         </div>
       `;
