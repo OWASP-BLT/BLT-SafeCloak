@@ -285,36 +285,35 @@
               <div class="card-header">
                 <h2 class="card-title">
                   <i class="fa-solid fa-key text-primary" aria-hidden="true"></i>
-                  Your Room ID
+                  Your Remote ID
                 </h2>
               </div>
               <div class="card-body">
                 <div
-                  class="rounded-md border border-neutral-border bg-gray-50 px-3 py-3 text-center font-mono text-lg font-bold tracking-widest text-gray-900"
+                  class="rounded-md border border-neutral-border bg-gray-50 px-3 py-3 text-center font-mono text-lg font-bold tracking-widest text-gray-900 relative"
                   id="my-peer-id"
-                  aria-label="Your room ID"
+                  aria-label="Your Remote ID"
                 >
-                  Connecting...
+                  <span id="peer-id-text">Generating...</span>
+                  <div class="absolute top-1/2 right-3 transform -translate-y-1/2 flex gap-1" style="display: none;">
+                    <button
+                      class="text-gray-500 hover:text-primary transition"
+                      onclick="copyToClipboard(document.getElementById('peer-id-text').textContent, 'ID')"
+                      title="Copy ID"
+                      aria-label="Copy ID to clipboard"
+                    >
+                      <i class="fa-regular fa-copy" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      class="text-gray-500 hover:text-primary transition"
+                      onclick="VideoChat.copyRoomLink()"
+                      title="Copy Invitation Link"
+                      aria-label="Copy invitation link to clipboard"
+                    >
+                      <i class="fa-solid fa-link" aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  class="btn btn-secondary mt-3 w-full"
-                  onclick="
-                    copyToClipboard(document.getElementById('my-peer-id').textContent, 'Room ID')
-                  "
-                  aria-label="Copy room ID to clipboard"
-                >
-                  <i class="fa-regular fa-copy" aria-hidden="true"></i>
-                  Copy Room ID
-                </button>
-                <button
-                  class="btn btn-primary mt-2 w-full"
-                  id="btn-copy-link"
-                  onclick="VideoChat.copyRoomLink()"
-                  aria-label="Copy shareable room link to clipboard"
-                >
-                  <i class="fa-solid fa-link" aria-hidden="true"></i>
-                  Copy Room Link
-                </button>
               </div>
             </div>
 
@@ -322,26 +321,26 @@
               <div class="card-header">
                 <h2 class="card-title">
                   <i class="fa-solid fa-phone text-primary" aria-hidden="true"></i>
-                  Join a Room
+                  Connect to a Peer
                 </h2>
               </div>
               <div class="card-body">
-                <label class="form-label" for="remote-id">Remote Room ID</label>
+                <label class="form-label" for="remote-id">Remote ID</label>
                 <input
                   type="text"
                   class="form-input"
                   id="remote-id"
-                  placeholder="Enter Room ID..."
+                  placeholder="Enter Remote ID..."
                   autocomplete="off"
-                  aria-label="Remote room ID"
+                  aria-label="Remote peer ID"
                 />
                 <button
                   class="btn btn-primary mt-3 w-full"
                   id="btn-call"
-                  aria-label="Add participant to room"
+                  aria-label="Connect securely to peer"
                 >
-                  <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
-                  Add Participant
+                  <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                  Connect Securely
                 </button>
               </div>
             </div>

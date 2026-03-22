@@ -244,8 +244,11 @@ const VideoChat = (() => {
     });
 
     peer.on("open", (id) => {
-      $("my-peer-id") && ($("my-peer-id").textContent = id);
-      updateStatus("Ready — share your Room ID", "secondary");
+      const idEl = $("peer-id-text");
+      if (idEl) idEl.textContent = id;
+      const iconDiv = document.querySelector('#my-peer-id .absolute');
+      if (iconDiv) iconDiv.style.display = 'flex';
+      updateStatus("Ready — share your ID", "secondary");
       setDotStatus("online");
       showToast("Connected to signaling server", "success");
       // Auto-connect if a room ID was passed in the URL
