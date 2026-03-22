@@ -335,12 +335,12 @@
                   aria-label="Remote peer ID"
                 />
                 <button
-                  class="btn btn-primary mt-3 w-full"
+                  class="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 w-full mt-3 flex items-center justify-center gap-2"
                   id="btn-call"
                   aria-label="Connect securely to peer"
                 >
                   <i class="fa-solid fa-lock" aria-hidden="true"></i>
-                  Connect Securely
+                  <span>Connect Securely</span>
                 </button>
               </div>
             </div>
@@ -349,17 +349,17 @@
               <div class="card-header">
                 <h2 class="card-title">
                   <i class="fa-solid fa-users text-primary" aria-hidden="true"></i>
-                  Participants
+                  Connected Peers
                   <span
                     id="participant-count"
-                    class="ml-auto text-xs font-bold text-gray-500"
+                    class="text-gray-600 font-semibold"
                     aria-live="polite"
-                    >0 connected</span
+                    > (0)</span
                   >
                 </h2>
               </div>
               <div class="card-body" id="participants-list">
-                <p class="text-sm text-gray-500 text-center py-2">No participants connected</p>
+                <p class="text-sm text-gray-500 text-center py-2">No peers connected</p>
               </div>
             </div>
 

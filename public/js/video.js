@@ -302,14 +302,14 @@ const VideoChat = (() => {
     const listEl = $("participants-list");
     const countEl = $("participant-count");
     if (countEl) {
-      countEl.textContent = `${activeCalls.size} connected`;
+      countEl.textContent = ` (${activeCalls.size})`;
     }
     if (!listEl) return;
     listEl.innerHTML = "";
     if (activeCalls.size === 0) {
       const empty = document.createElement("p");
       empty.className = "text-sm text-gray-500 text-center py-2";
-      empty.textContent = "No participants connected";
+      empty.textContent = "No peers connected";
       listEl.appendChild(empty);
       return;
     }
@@ -461,7 +461,7 @@ const VideoChat = (() => {
       return;
     }
     if (!remotePeerId) {
-      showToast("Enter a Room ID to call", "warning");
+      showToast("Enter a remoted ID to invite", "warning");
       return;
     }
     if (remotePeerId === state.peerId) {
@@ -469,7 +469,7 @@ const VideoChat = (() => {
       return;
     }
     if (activeCalls.has(remotePeerId)) {
-      showToast("Already connected to this participant", "warning");
+      showToast("Already connected to this peer", "warning");
       return;
     }
 
@@ -562,25 +562,47 @@ const VideoChat = (() => {
     showToast("Session ended and media released", "success");
   }
 
-  /* ── Noise suppression hint ── */
-  async function toggleNoiseSuppression() {
+  /* ── Audio enhancements ── */
+  async function applyAudioConstraints() {
     if (!localStream) return;
     const audioTrack = localStream.getAudioTracks()[0];
     if (!audioTrack) return;
     try {
-      const settings = audioTrack.getSettings();
-      const current = settings.noiseSuppression;
       await audioTrack.applyConstraints({
-        noiseSuppression: !current,
-        echoCancellation: true,
-        autoGainControl: true,
+        noiseSuppression: noiseSuppression,
+        echoCancellation: echoCancellation,
+        autoGainControl: autoGainControl,
       });
-      showToast(`Noise suppression ${!current ? "enabled" : "disabled"}`, "success");
-      const btn = $("btn-noise");
-      if (btn) btn.classList.toggle("active", !current);
     } catch {
-      showToast("Noise suppression not supported on this device", "warning");
+      showToast("Audio constraints not fully supported on this device", "warning");
     }
+  }
+
+  async function toggleNoiseSuppression() {
+    if (!localStream) return;
+    noiseSuppression = !noiseSuppression;
+    await applyAudioConstraints();
+    showToast(`Noise suppression ${noiseSuppression ? "enabled" : "disabled"}`, "success");
+    const btn = $("btn-noise");
+    if (btn) btn.classList.toggle("active", noiseSuppression);
+  }
+
+  async function toggleEchoCancel() {
+    if (!localStream) return;
+    echoCancellation = !echoCancellation;
+    await applyAudioConstraints();
+    showToast(`Echo cancellation ${echoCancellation ? "enabled" : "disabled"}`, "success");
+    const btn = $("btn-echo");
+    if (btn) btn.classList.toggle("active", echoCancellation);
+  }
+
+  async function toggleAutoGain() {
+    if (!localStream) return;
+    autoGainControl = !autoGainControl;
+    await applyAudioConstraints();
+    showToast(`Auto gain control ${autoGainControl ? "enabled" : "disabled"}`, "success");
+    const btn = $("btn-auto-gain");
+    if (btn) btn.classList.toggle("active", autoGainControl);
   }
 
   /* ── Consent gate ── */
@@ -630,7 +652,7 @@ const VideoChat = (() => {
       return;
     }
     const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.peerId)}`;
-    copyToClipboard(url, "Room link");
+    copyToClipboard(url, "Invitation link");
   }
 
   /* ── Screen share ── */
