@@ -72,8 +72,10 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # Serve static files from public/
-        candidate = ROOT / "public" / path.lstrip("/")
-        if candidate.is_file():
+        public_root = (ROOT / "public").resolve()
+        candidate = (public_root / path.lstrip("/")).resolve()
+        # Ensure the resolved path is within the public/ directory to avoid traversal
+        if public_root in candidate.parents and candidate.is_file():
             data = candidate.read_bytes()
             ct = _MIME.get(candidate.suffix, "application/octet-stream")
             self._respond(200, ct, data)
