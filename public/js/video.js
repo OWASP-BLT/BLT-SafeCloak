@@ -461,7 +461,7 @@ const VideoChat = (() => {
       return;
     }
     if (!remotePeerId) {
-      showToast("Enter a remoted ID to invite", "warning");
+      showToast("Enter a remote ID to invite", "warning");
       return;
     }
     if (remotePeerId === state.peerId) {
