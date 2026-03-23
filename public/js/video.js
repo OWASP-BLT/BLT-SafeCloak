@@ -406,7 +406,10 @@ const VideoChat = (() => {
         const sender = call.peerConnection
           .getSenders()
           .find((s) => s.track && s.track.kind === "audio");
-        if (sender) sender.replaceTrack(noiseCloakProcessedTrack).catch(() => {});
+        if (sender)
+          sender.replaceTrack(noiseCloakProcessedTrack).catch((err) => {
+            console.warn("Noise cloak: could not apply to new peer connection:", err);
+          });
       }
     });
 
@@ -658,7 +661,13 @@ const VideoChat = (() => {
           const sender = call.peerConnection
             .getSenders()
             .find((s) => s.track && s.track.kind === "audio");
-          if (sender) await sender.replaceTrack(noiseCloakProcessedTrack);
+          if (sender)
+            await sender.replaceTrack(noiseCloakProcessedTrack).catch((err) => {
+              showToast(
+                "Anti-recording noise may not be active for all peers: " + err.message,
+                "warning"
+              );
+            });
         }
       }
 
@@ -689,7 +698,10 @@ const VideoChat = (() => {
         const sender = call.peerConnection
           .getSenders()
           .find((s) => s.track && s.track.kind === "audio");
-        if (sender) await sender.replaceTrack(originalTrack);
+        if (sender)
+          await sender.replaceTrack(originalTrack).catch((err) => {
+            showToast("Could not fully restore audio track: " + err.message, "warning");
+          });
       }
     }
 
