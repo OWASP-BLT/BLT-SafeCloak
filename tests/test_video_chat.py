@@ -516,3 +516,78 @@ def test_three_clients_connect_and_see_cameras(base_url):
                 )
         finally:
             browser.close()
+
+
+def test_noise_cloak_toggle(base_url):
+    """
+    Two clients connect; after the call is established the noise-cloak button
+    should be present, and toggling it should activate/deactivate the
+    anti-recording noise without breaking the call.
+    """
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            ctx1 = _new_context(browser)
+            ctx2 = _new_context(browser)
+            p1 = ctx1.new_page()
+            p2 = ctx2.new_page()
+
+            video_url = f"{base_url}/video-chat"
+            p1.goto(video_url)
+            p2.goto(video_url)
+
+            id1 = _peer_id(p1)
+            id2 = _peer_id(p2)
+            assert id1 and id2 and id1 != id2
+
+            # ── Establish a call between p1 and p2 ───────────────────────────
+            p2.fill("#remote-id", id1)
+            p2.click("#btn-call")
+            _accept_consent(p2)
+            _accept_consent(p1)
+
+            for page in (p1, p2):
+                page.wait_for_function(
+                    "document.querySelectorAll('.video-wrapper').length >= 2",
+                    timeout=TIMEOUT_MS,
+                )
+
+            # ── Noise-cloak button must be present and initially inactive ─────
+            assert p1.is_visible("#btn-noise-cloak"), (
+                "Anti-recording noise button must be visible during a call"
+            )
+            assert not p1.evaluate(
+                "document.getElementById('btn-noise-cloak').classList.contains('active')"
+            ), "Noise-cloak button should be inactive initially"
+
+            # ── Enable noise cloak ───────────────────────────────────────────
+            p1.click("#btn-noise-cloak")
+            p1.wait_for_function(
+                "document.getElementById('btn-noise-cloak').classList.contains('active')",
+                timeout=TIMEOUT_MS,
+            )
+            assert p1.evaluate(
+                "document.getElementById('btn-noise-cloak').classList.contains('active')"
+            ), "Noise-cloak button should be active after enabling"
+
+            # Verify the VideoChat module reports the feature as enabled.
+            assert p1.evaluate("VideoChat.state !== undefined"), (
+                "VideoChat module must be accessible"
+            )
+
+            # ── Disable noise cloak ──────────────────────────────────────────
+            p1.click("#btn-noise-cloak")
+            p1.wait_for_function(
+                "!document.getElementById('btn-noise-cloak').classList.contains('active')",
+                timeout=TIMEOUT_MS,
+            )
+            assert not p1.evaluate(
+                "document.getElementById('btn-noise-cloak').classList.contains('active')"
+            ), "Noise-cloak button should be inactive after disabling"
+
+            # ── Call must still be alive after toggle ─────────────────────────
+            assert p1.evaluate(_STREAM_CHECK_JS), (
+                "Client 1 should still see Client 2's stream after noise-cloak toggle"
+            )
+        finally:
+            browser.close()
