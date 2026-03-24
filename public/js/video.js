@@ -94,7 +94,7 @@ const VideoChat = (() => {
 
   function resetCallHealthPanel() {
     setCallHealthView(
-      { label: "Idle", tone: "quality-good" },
+      { label: "Idle", tone: "quality-idle" },
       "--",
       "--",
       "Connect to a participant to start live quality checks."

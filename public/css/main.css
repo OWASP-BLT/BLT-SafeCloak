@@ -284,6 +284,11 @@ body {
   color: #991b1b;
 }
 
+.quality-idle {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
 .health-tip {
   font-size: 0.8rem;
   color: #4b5563;
