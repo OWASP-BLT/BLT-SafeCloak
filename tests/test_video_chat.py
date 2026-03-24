@@ -438,8 +438,71 @@ _STREAM_CHECK_JS = """
 """
 
 
+def _received_chat_js(text: str) -> str:
+    """Return a JS arrow-function string that returns true when *text* has
+    been received (i.e. it appears in a non-self chat bubble)."""
+    safe = text.replace("\\", "\\\\").replace("'", "\\'")
+    return (
+        "() => Array.from("
+        "document.querySelectorAll("
+        "'#chat-messages .chat-msg:not(.self) .chat-msg-bubble'"
+        f")).some(el => el.textContent === '{safe}')"
+    )
+
+
+def _setup_three_client_mesh(browser, base_url):
+    """Create three browser pages and connect them in a full-mesh video call.
+
+    Returns ``(p1, p2, p3, id1, id2, id3)``.  The caller is responsible for
+    closing the browser / contexts when the test is done.
+    """
+    ctx1 = _new_context(browser)
+    ctx2 = _new_context(browser)
+    ctx3 = _new_context(browser)
+
+    p1 = ctx1.new_page()
+    p2 = ctx2.new_page()
+    p3 = ctx3.new_page()
+
+    video_url = f"{base_url}/video-chat"
+    for page in (p1, p2, p3):
+        page.goto(video_url)
+
+    id1 = _peer_id(p1)
+    id2 = _peer_id(p2)
+    id3 = _peer_id(p3)
+    assert id1 and id2 and id3, "All clients must receive a peer ID"
+    assert len({id1, id2, id3}) == 3, "All peer IDs must be unique"
+
+    # Step 1: Client 2 calls Client 1
+    p2.fill("#remote-id", id1)
+    p2.click("#btn-call")
+    _accept_consent(p2)
+    _accept_consent(p1)
+
+    for page in (p1, p2):
+        page.wait_for_function(
+            "document.querySelectorAll('.video-wrapper').length >= 2",
+            timeout=TIMEOUT_MS,
+        )
+
+    # Step 2: Client 3 calls Client 1 (p1 already consented, no dialog shown)
+    p3.fill("#remote-id", id1)
+    p3.click("#btn-call")
+    _accept_consent(p3)
+
+    # Step 3: Wait for full mesh (1 local + 2 remote wrappers per client)
+    for page in (p1, p2, p3):
+        page.wait_for_function(
+            "document.querySelectorAll('.video-wrapper').length >= 3",
+            timeout=TIMEOUT_MS,
+        )
+
+    return p1, p2, p3, id1, id2, id3
+
+
 # ---------------------------------------------------------------------------
-# Test
+# Tests
 # ---------------------------------------------------------------------------
 
 
@@ -513,6 +576,71 @@ def test_three_clients_connect_and_see_cameras(base_url):
                 page.wait_for_function(_STREAM_CHECK_JS, timeout=TIMEOUT_MS)
                 assert page.evaluate(_STREAM_CHECK_JS), (
                     f"{name} should see live streams from both other participants"
+                )
+        finally:
+            browser.close()
+
+
+def test_three_clients_chat_propagates(base_url):
+    """
+    Three clients join the same room.  Assert that a chat message sent by
+    any one client is received by both other clients (full P2P data-channel
+    propagation across the full mesh).
+
+    Verification flow
+    -----------------
+    1. Establish a three-way full-mesh video + data-channel session.
+    2. Wait for live camera streams on every client (ensures data channels
+       are also up, as they are opened concurrently with the media calls).
+    3. Client 1 sends a unique message → both Client 2 and Client 3 must
+       show it as a received (non-self) chat bubble.
+    4. Client 2 sends a unique message → both Client 1 and Client 3 must
+       show it.
+    5. Client 3 sends a unique message → both Client 1 and Client 2 must
+       show it.
+    """
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            p1, p2, p3, _id1, _id2, _id3 = _setup_three_client_mesh(browser, base_url)
+
+            # Wait for live streams on every client before exercising chat.
+            # This confirms that WebRTC + data-channel connections are fully
+            # established (data channels are opened alongside media calls).
+            for page in (p1, p2, p3):
+                page.wait_for_function(_STREAM_CHECK_JS, timeout=TIMEOUT_MS)
+
+            # ── Round 1: Client 1 sends ──────────────────────────────────────
+            msg1 = "Hello from client one"
+            p1.fill("#chat-input", msg1)
+            p1.press("#chat-input", "Enter")
+
+            for page, name in ((p2, "Client 2"), (p3, "Client 3")):
+                page.wait_for_function(_received_chat_js(msg1), timeout=TIMEOUT_MS)
+                assert page.evaluate(_received_chat_js(msg1)), (
+                    f"{name} should display the message sent by Client 1"
+                )
+
+            # ── Round 2: Client 2 sends ──────────────────────────────────────
+            msg2 = "Hello from client two"
+            p2.fill("#chat-input", msg2)
+            p2.press("#chat-input", "Enter")
+
+            for page, name in ((p1, "Client 1"), (p3, "Client 3")):
+                page.wait_for_function(_received_chat_js(msg2), timeout=TIMEOUT_MS)
+                assert page.evaluate(_received_chat_js(msg2)), (
+                    f"{name} should display the message sent by Client 2"
+                )
+
+            # ── Round 3: Client 3 sends ──────────────────────────────────────
+            msg3 = "Hello from client three"
+            p3.fill("#chat-input", msg3)
+            p3.press("#chat-input", "Enter")
+
+            for page, name in ((p1, "Client 1"), (p2, "Client 2")):
+                page.wait_for_function(_received_chat_js(msg3), timeout=TIMEOUT_MS)
+                assert page.evaluate(_received_chat_js(msg3)), (
+                    f"{name} should display the message sent by Client 3"
                 )
         finally:
             browser.close()

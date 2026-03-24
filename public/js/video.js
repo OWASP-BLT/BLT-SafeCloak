@@ -235,13 +235,19 @@ const VideoChat = (() => {
     state.sessionKey = await Crypto.generateKey();
     state.sessionId = state.peerId;
 
-    peer = new Peer(state.peerId, Object.assign({
-      host: "0.peerjs.com",
-      port: 443,
-      secure: true,
-      path: "/",
-      debug: 0,
-    }, window.__PEERJS_CONFIG__ || {}));
+    peer = new Peer(
+      state.peerId,
+      Object.assign(
+        {
+          host: "0.peerjs.com",
+          port: 443,
+          secure: true,
+          path: "/",
+          debug: 0,
+        },
+        window.__PEERJS_CONFIG__ || {}
+      )
+    );
 
     peer.on("open", (id) => {
       $("my-peer-id") && ($("my-peer-id").textContent = id);
@@ -390,6 +396,7 @@ const VideoChat = (() => {
       );
       setDotStatus("online");
       $("call-controls") && $("call-controls").classList.remove("hidden");
+      $("reaction-bar") && $("reaction-bar").classList.remove("hidden");
       updateParticipantsList();
     });
 
@@ -402,6 +409,7 @@ const VideoChat = (() => {
         updateStatus("Call ended", "muted");
         setDotStatus("offline");
         $("call-controls") && $("call-controls").classList.add("hidden");
+        $("reaction-bar") && $("reaction-bar").classList.add("hidden");
       } else {
         const count = activeCalls.size;
         updateStatus(
@@ -419,18 +427,42 @@ const VideoChat = (() => {
 
   /* ── Full-mesh helpers ── */
   function setupDataConn(conn) {
-    activeDataConns.set(conn.peer, conn);
+    const peerId = conn.peer;
+
+    // Register immediately to prevent duplicate connections
+    activeDataConns.set(peerId, conn);
+
+    // Show join notification once the channel is confirmed open
+    if (conn.open) {
+      addChatMessage("", `${peerId} joined the chat`, null, false, true);
+    } else {
+      conn.on("open", () => {
+        // Only notify if this connection is still the active one for this peer
+        if (activeDataConns.get(peerId) === conn) {
+          addChatMessage("", `${peerId} joined the chat`, null, false, true);
+        }
+      });
+    }
+
     conn.on("data", (data) => {
-      if (data && data.type === "peers" && Array.isArray(data.ids)) {
+      if (!data || typeof data !== "object") return;
+      if (data.type === "peers" && Array.isArray(data.ids)) {
         data.ids.forEach((id) => {
           if (id !== state.peerId && !activeCalls.has(id)) {
             callPeer(id);
           }
         });
+      } else {
+        handleDataMessage(data, peerId);
       }
     });
-    conn.on("close", () => activeDataConns.delete(conn.peer));
-    conn.on("error", () => activeDataConns.delete(conn.peer));
+    conn.on("close", () => {
+      activeDataConns.delete(peerId);
+      addChatMessage("", `${peerId} left the chat`, null, false, true);
+    });
+    conn.on("error", () => {
+      activeDataConns.delete(peerId);
+    });
   }
 
   function sendPeerListTo(remotePeerId) {
@@ -484,7 +516,10 @@ const VideoChat = (() => {
     }
 
     if (!isValidRoomId(remotePeerId)) {
-      showToast("Room ID must be exactly 6 characters using only uppercase letters (A-Z except I,O) and digits (2-9)", "error");
+      showToast(
+        "Room ID must be exactly 6 characters using only uppercase letters (A-Z except I,O) and digits (2-9)",
+        "error"
+      );
       return;
     }
     if (remotePeerId === state.peerId) {
@@ -505,6 +540,14 @@ const VideoChat = (() => {
     setDotStatus("connecting");
     const call = peer.call(remotePeerId, localStream);
     activeCalls.set(remotePeerId, call);
+
+    // Establish or reuse data channel for chat and reactions
+    const existingConn = activeDataConns.get(remotePeerId);
+    if (!existingConn || !existingConn.open) {
+      const dataConn = peer.connect(remotePeerId);
+      setupDataConn(dataConn);
+    }
+
     updateParticipantsList();
     handleCallStream(call);
   }
@@ -540,6 +583,12 @@ const VideoChat = (() => {
     const call = activeCalls.get(peerId);
     if (call) {
       call.close();
+      activeCalls.delete(peerId);
+    }
+    const dataConn = activeDataConns.get(peerId);
+    if (dataConn) {
+      dataConn.close();
+      activeDataConns.delete(peerId);
     }
   }
 
@@ -556,6 +605,7 @@ const VideoChat = (() => {
       videoGrid.querySelectorAll(".video-wrapper:not(:first-child)").forEach((w) => w.remove());
     }
     $("call-controls") && $("call-controls").classList.add("hidden");
+    $("reaction-bar") && $("reaction-bar").classList.add("hidden");
     updateParticipantsList();
     showToast("Call ended", "info");
     // Record consent end
@@ -701,6 +751,98 @@ const VideoChat = (() => {
     showToast("Screen sharing stopped", "info");
   }
 
+  /* ── Data channels (chat + reactions) ── */
+  const ALLOWED_REACTIONS = new Set(["👍", "❤️", "😂", "😮", "👏", "🔥", "🎉", "😢"]);
+  const MAX_CHAT_LENGTH = 500;
+
+  function handleDataMessage(data, fromPeerId) {
+    if (data.type === "reaction") {
+      if (typeof data.emoji === "string" && ALLOWED_REACTIONS.has(data.emoji)) {
+        showReaction(data.emoji);
+      }
+    } else if (data.type === "chat") {
+      if (typeof data.text === "string" && data.text.trim()) {
+        const text = data.text.slice(0, MAX_CHAT_LENGTH);
+        const time =
+          typeof data.time === "string" && /^[\d: APMapm]{3,10}$/.test(data.time)
+            ? data.time
+            : null;
+        addChatMessage(fromPeerId, text, time);
+      }
+    }
+  }
+
+  function sendToAll(data) {
+    activeDataConns.forEach((conn) => {
+      if (conn.open) conn.send(data);
+    });
+  }
+
+  function sendReaction(emoji) {
+    if (!emoji) return;
+    showReaction(emoji);
+    sendToAll({ type: "reaction", emoji });
+  }
+
+  function showReaction(emoji) {
+    const el = document.createElement("div");
+    el.className = "reaction-float";
+    el.textContent = emoji;
+    el.style.left = `${10 + Math.random() * 75}%`; // 10%–85% of viewport width
+    document.body.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+  }
+
+  function sendChatMessage() {
+    const input = $("chat-input");
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    addChatMessage("You", text, time, true);
+    sendToAll({ type: "chat", text, time });
+  }
+
+  function addChatMessage(fromId, text, time, isSelf = false, isSystem = false) {
+    const container = $("chat-messages");
+    if (!container) return;
+
+    // Remove the initial placeholder on first appended message (system or user)
+    const placeholder = container.querySelector("[data-chat-placeholder]");
+    if (placeholder) placeholder.remove();
+
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `chat-msg${isSelf ? " self" : ""}${isSystem ? " system" : ""}`;
+
+    if (!isSystem) {
+      const header = document.createElement("div");
+      header.className = "chat-msg-header";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "font-mono font-bold truncate max-w-[100px]";
+      nameSpan.title = fromId;
+      nameSpan.textContent = fromId;
+      header.appendChild(nameSpan);
+
+      if (time) {
+        const timeSpan = document.createElement("span");
+        timeSpan.textContent = time;
+        header.appendChild(timeSpan);
+      }
+
+      msgDiv.appendChild(header);
+    }
+
+    const bubble = document.createElement("div");
+    bubble.className = "chat-msg-bubble";
+    bubble.textContent = text;
+    msgDiv.appendChild(bubble);
+
+    container.appendChild(msgDiv);
+    container.scrollTop = container.scrollHeight;
+  }
+
   /* ── Init ── */
   async function init() {
     const ok = await startLocalMedia();
@@ -719,6 +861,8 @@ const VideoChat = (() => {
     shareScreen,
     stopScreenShare,
     copyRoomLink,
+    sendReaction,
+    sendChatMessage,
     state,
   };
 })();
