@@ -361,6 +361,10 @@ body {
   color: #d1d5db;
 }
 
+.dark .modal strong {
+  color: #fca5a5;
+}
+
 .dark .modal .alert {
   border-color: #1d4ed8;
   background: rgba(30, 58, 138, 0.22);
