@@ -3,6 +3,15 @@
  * Shared UI utilities: toasts, navbar toggle, modal helpers
  */
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /* ── Toast notifications ── */
 function showToast(message, type = "info", duration = 3500) {
   const container =
