@@ -269,7 +269,12 @@ const VideoChat = (() => {
           if (typeof stat.bytesSent === "number") bytesOut = Math.max(bytesOut, stat.bytesSent);
         }
       });
-    } catch {
+    } catch (err) {
+      console.error("collectPeerStats: getStats failed", {
+        peerId,
+        pcState: pc.connectionState || "unknown",
+        error: err,
+      });
       return null;
     }
 
