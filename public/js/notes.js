@@ -76,12 +76,8 @@ const NotesApp = (() => {
     return passphrase;
   }
 
-  async function saveNotes() {
-    try {
-      await Crypto.saveEncrypted(STORAGE_KEY, notes, getPassphrase());
-    } catch (err) {
-      console.error("Failed to save notes:", err);
-    }
+  async function saveNotes(nextNotes = notes) {
+    await Crypto.saveEncrypted(STORAGE_KEY, nextNotes, getPassphrase());
   }
 
   async function loadNotes() {
@@ -134,7 +130,9 @@ const NotesApp = (() => {
     if (body) note.content = body.value;
     note.updatedAt = Date.now();
     // Update list without full re-render
-    const item = document.querySelector(`.note-item[data-id="${activeNoteId}"]`);
+    const item = Array.from(document.querySelectorAll(".note-item")).find(
+      (el) => el.getAttribute("data-id") === String(activeNoteId)
+    );
     if (item) {
       const titleText = item.querySelector(".note-item-title-text");
       if (titleText) titleText.textContent = note.title;
@@ -147,7 +145,10 @@ const NotesApp = (() => {
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      saveNotes();
+      saveNotes().catch((err) => {
+        console.error("Failed to save notes:", err);
+        showToast("Failed to save notes. Please try again.", "error");
+      });
     }, 800);
   }
 
@@ -352,7 +353,18 @@ const NotesApp = (() => {
 
   function normalizeComparableId(value) {
     if (value === null || value === undefined) return "";
-    return String(value).trim();
+    return String(value)
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[-_]+|[-_]+$/g, "")
+      .slice(0, 64);
+  }
+
+  function createSafeImportedId(seed) {
+    const normalized = normalizeComparableId(seed);
+    if (normalized) return normalized;
+    return `imp-${Crypto.randomId(10).toLowerCase()}`;
   }
 
   function sanitizeImportedNote(note, fallbackId, importSource) {
@@ -363,9 +375,9 @@ const NotesApp = (() => {
       ? note.tags.filter((tag) => typeof tag === "string").slice(0, 20)
       : [];
 
-    const normalizedId = normalizeComparableId(note.id);
+    const normalizedId = createSafeImportedId(note.id);
     return {
-      id: normalizedId || fallbackId,
+      id: normalizedId || createSafeImportedId(fallbackId),
       title: (note.title || "Untitled Note").toString().trim() || "Untitled Note",
       content: typeof note.content === "string" ? note.content : "",
       tags,
@@ -547,6 +559,7 @@ const NotesApp = (() => {
       let addedCount = 0;
       let skippedCount = 0;
       let replacedCount = 0;
+      let nextNotes;
 
       if (mode === "replace_conflicts") {
         const byId = new Map(
@@ -563,7 +576,7 @@ const NotesApp = (() => {
           }
           byId.set(key, importedNote);
         });
-        notes = Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+        nextNotes = Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt);
       } else {
         const additions = uniqueImported.filter((n) => !existingIds.has(normalizeComparableId(n.id)));
         skippedCount = uniqueImported.length - additions.length;
@@ -572,16 +585,19 @@ const NotesApp = (() => {
           showToast("No new notes to import. All selected notes already exist by ID.", "info");
           return;
         }
-        notes = [...additions, ...notes].sort((a, b) => b.updatedAt - a.updatedAt);
+        nextNotes = [...additions, ...notes].sort((a, b) => b.updatedAt - a.updatedAt);
       }
 
-      if (!notes.length) {
-        activeNoteId = null;
-      } else if (!notes.some((n) => n.id === activeNoteId)) {
-        activeNoteId = notes[0].id;
-      }
+      const nextActiveNoteId =
+        !nextNotes.length
+          ? null
+          : nextNotes.some((n) => n.id === activeNoteId)
+            ? activeNoteId
+            : nextNotes[0].id;
 
-      await saveNotes();
+      await saveNotes(nextNotes);
+      notes = nextNotes;
+      activeNoteId = nextActiveNoteId;
       renderNotesList();
       renderEditor();
 
