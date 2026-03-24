@@ -235,13 +235,19 @@ const VideoChat = (() => {
     state.sessionKey = await Crypto.generateKey();
     state.sessionId = state.peerId;
 
-    peer = new Peer(state.peerId, Object.assign({
-      host: "0.peerjs.com",
-      port: 443,
-      secure: true,
-      path: "/",
-      debug: 0,
-    }, window.__PEERJS_CONFIG__ || {}));
+    peer = new Peer(
+      state.peerId,
+      Object.assign(
+        {
+          host: "0.peerjs.com",
+          port: 443,
+          secure: true,
+          path: "/",
+          debug: 0,
+        },
+        window.__PEERJS_CONFIG__ || {}
+      )
+    );
 
     peer.on("open", (id) => {
       $("my-peer-id") && ($("my-peer-id").textContent = id);
@@ -510,7 +516,10 @@ const VideoChat = (() => {
     }
 
     if (!isValidRoomId(remotePeerId)) {
-      showToast("Room ID must be exactly 6 characters using only uppercase letters (A-Z except I,O) and digits (2-9)", "error");
+      showToast(
+        "Room ID must be exactly 6 characters using only uppercase letters (A-Z except I,O) and digits (2-9)",
+        "error"
+      );
       return;
     }
     if (remotePeerId === state.peerId) {
@@ -800,7 +809,7 @@ const VideoChat = (() => {
     if (!container) return;
 
     // Remove the initial placeholder on first appended message (system or user)
-    const placeholder = container.querySelector(".chat-msg.system");
+    const placeholder = container.querySelector("[data-chat-placeholder]");
     if (placeholder) placeholder.remove();
 
     const msgDiv = document.createElement("div");
