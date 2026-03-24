@@ -236,6 +236,15 @@
               </button>
               <button
                 class="control-btn"
+                id="btn-noise-cloak"
+                title="Toggle anti-recording noise"
+                onclick="VideoChat.toggleNoiseCloak()"
+                aria-label="Toggle anti-recording noise"
+              >
+                <i class="fa-solid fa-ear-deaf" aria-hidden="true"></i>
+              </button>
+              <button
+                class="control-btn"
                 id="btn-screen"
                 title="Share screen"
                 onclick="VideoChat.shareScreen()"
@@ -398,6 +407,31 @@
                     >Open-source
                   </li>
                 </ul>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">
+                  <i class="fa-solid fa-ear-deaf text-primary" aria-hidden="true"></i>
+                  Anti-Recording Protection
+                </h2>
+              </div>
+              <div class="card-body">
+                <p class="mb-3 text-xs text-gray-500">
+                  Injects ultrasonic tones into outgoing audio and local speakers. Recordings made
+                  nearby will be distorted while your voice remains audible to participants.
+                </p>
+                <button
+                  class="btn btn-secondary w-full"
+                  id="btn-noise-cloak-sidebar"
+                  onclick="VideoChat.toggleNoiseCloak()"
+                  aria-label="Toggle anti-recording noise protection"
+                  aria-pressed="false"
+                >
+                  <i class="fa-solid fa-ear-deaf" aria-hidden="true"></i>
+                  <span id="noise-cloak-label">Enable Noise Cloak</span>
+                </button>
               </div>
             </div>
 

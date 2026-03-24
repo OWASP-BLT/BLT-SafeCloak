@@ -15,6 +15,10 @@ const VideoChat = (() => {
   let camOff = false;
   let consentGiven = false;
   let screenSharing = false;
+  let noiseCloakEnabled = false;
+  let noiseCloakContext = null;
+  let noiseCloakProcessedTrack = null;
+  let noiseCloakStreamGain = null;
 
   const state = {
     peerId: null,
@@ -235,13 +239,19 @@ const VideoChat = (() => {
     state.sessionKey = await Crypto.generateKey();
     state.sessionId = state.peerId;
 
-    peer = new Peer(state.peerId, Object.assign({
-      host: "0.peerjs.com",
-      port: 443,
-      secure: true,
-      path: "/",
-      debug: 0,
-    }, window.__PEERJS_CONFIG__ || {}));
+    peer = new Peer(
+      state.peerId,
+      Object.assign(
+        {
+          host: "0.peerjs.com",
+          port: 443,
+          secure: true,
+          path: "/",
+          debug: 0,
+        },
+        window.__PEERJS_CONFIG__ || {}
+      )
+    );
 
     peer.on("open", (id) => {
       $("my-peer-id") && ($("my-peer-id").textContent = id);
@@ -391,6 +401,17 @@ const VideoChat = (() => {
       setDotStatus("online");
       $("call-controls") && $("call-controls").classList.remove("hidden");
       updateParticipantsList();
+      // If the noise cloak was already active when this call connected, apply
+      // the processed audio track to its outgoing sender now.
+      if (noiseCloakEnabled && noiseCloakProcessedTrack && call.peerConnection) {
+        const sender = call.peerConnection
+          .getSenders()
+          .find((s) => s.track && s.track.kind === "audio");
+        if (sender)
+          sender.replaceTrack(noiseCloakProcessedTrack).catch((err) => {
+            console.warn("Noise cloak: could not apply to new peer connection:", err);
+          });
+      }
     });
 
     call.on("close", () => {
@@ -514,6 +535,12 @@ const VideoChat = (() => {
     if (!localStream) return;
     micMuted = !micMuted;
     localStream.getAudioTracks().forEach((t) => (t.enabled = !micMuted));
+    // If the noise cloak is active, also gate its outbound stream gain so that
+    // muting fully silences what peers receive (the cloak oscillators would
+    // otherwise keep transmitting even with the mic track disabled).
+    if (noiseCloakStreamGain) {
+      noiseCloakStreamGain.gain.value = micMuted ? 0 : 1;
+    }
     const btn = $("btn-mic");
     if (btn) {
       btn.textContent = micMuted ? "🔇" : "🎙️";
@@ -580,6 +607,17 @@ const VideoChat = (() => {
     }
     if (voiceAnimFrame) cancelAnimationFrame(voiceAnimFrame);
     if (audioContext) audioContext.close();
+    // Clean up noise cloak resources.
+    noiseCloakEnabled = false;
+    if (noiseCloakContext) {
+      noiseCloakContext.close();
+      noiseCloakContext = null;
+    }
+    noiseCloakProcessedTrack = null;
+    noiseCloakStreamGain = null;
+    const noiseCloakBtn = $("btn-noise-cloak");
+    if (noiseCloakBtn) noiseCloakBtn.classList.remove("active");
+    updateNoiseCloakSidebarBtn(false);
     setDotStatus("offline");
     updateStatus("Disconnected", "muted");
     showToast("Session ended and media released", "success");
@@ -603,6 +641,154 @@ const VideoChat = (() => {
       if (btn) btn.classList.toggle("active", !current);
     } catch {
       showToast("Noise suppression not supported on this device", "warning");
+    }
+  }
+
+  /* ── Anti-recording noise cloak ── */
+
+  /** Sync the sidebar toggle button label and style to match `enabled`. */
+  function updateNoiseCloakSidebarBtn(enabled) {
+    const sidebar = $("btn-noise-cloak-sidebar");
+    if (sidebar) {
+      sidebar.classList.toggle("btn-primary", enabled);
+      sidebar.classList.toggle("btn-secondary", !enabled);
+      sidebar.setAttribute("aria-pressed", enabled ? "true" : "false");
+    }
+    const label = $("noise-cloak-label");
+    if (label) label.textContent = enabled ? "Disable Noise Cloak" : "Enable Noise Cloak";
+  }
+
+  /**
+   * Start the noise cloak: inject ultrasonic tones (17.5–20 kHz) into the
+   * outgoing WebRTC audio and also emit them through the local speakers so
+   * that nearby recording devices pick up inaudible interference.
+   */
+  async function startNoiseCloak() {
+    if (!localStream) {
+      showToast("No active stream — allow camera/mic first", "warning");
+      return false;
+    }
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      showToast("No audio track — cannot enable anti-recording noise", "warning");
+      return false;
+    }
+    try {
+      noiseCloakContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Destination that produces a processed MediaStream for WebRTC senders.
+      const streamDest = noiseCloakContext.createMediaStreamDestination();
+
+      // Master gain for the outbound (WebRTC) path. Initialized to 0 when the
+      // mic is already muted so that muting fully silences peers even while the
+      // cloak is active. Speaker output is intentionally unaffected by mute.
+      noiseCloakStreamGain = noiseCloakContext.createGain();
+      noiseCloakStreamGain.gain.value = micMuted ? 0 : 1;
+      noiseCloakStreamGain.connect(streamDest);
+
+      // Route the local microphone through the noise-cloak graph so voice is
+      // still transmitted alongside the protective tones.
+      const micSource = noiseCloakContext.createMediaStreamSource(new MediaStream([audioTrack]));
+      micSource.connect(noiseCloakStreamGain);
+
+      // Ultrasonic carrier tones — near-inaudible to humans but picked up by
+      // recording hardware, causing non-linear distortion artefacts.
+      // Only include tones below the Nyquist limit (with a 10% margin) to
+      // prevent aliasing into the audible band on devices with lower sample rates.
+      const nyquist = noiseCloakContext.sampleRate / 2;
+      const maxToneFreq = nyquist * 0.9;
+      [17500, 18000, 18500, 19000, 19500, 20000]
+        .filter((freq) => freq < maxToneFreq)
+        .forEach((freq) => {
+          const osc = noiseCloakContext.createOscillator();
+          const gain = noiseCloakContext.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.value = 0.05;
+          osc.connect(gain);
+          // Inject into the outgoing WebRTC stream (gated by the master gain).
+          gain.connect(noiseCloakStreamGain);
+          // Also emit through the device speakers for physical-room protection.
+          gain.connect(noiseCloakContext.destination);
+          osc.start();
+        });
+
+      noiseCloakProcessedTrack = streamDest.stream.getAudioTracks()[0];
+
+      // Replace the audio sender in all currently active calls.
+      for (const call of activeCalls.values()) {
+        if (call.peerConnection) {
+          const sender = call.peerConnection
+            .getSenders()
+            .find((s) => s.track && s.track.kind === "audio");
+          if (sender)
+            await sender.replaceTrack(noiseCloakProcessedTrack).catch((err) => {
+              showToast(
+                "Anti-recording noise may not be active for all peers: " + err.message,
+                "warning"
+              );
+            });
+        }
+      }
+
+      noiseCloakEnabled = true;
+      return true;
+    } catch (err) {
+      if (noiseCloakContext) {
+        noiseCloakContext.close();
+        noiseCloakContext = null;
+      }
+      noiseCloakProcessedTrack = null;
+      noiseCloakStreamGain = null;
+      showToast("Anti-recording noise unavailable: " + err.message, "error");
+      return false;
+    }
+  }
+
+  /**
+   * Stop the noise cloak: close the AudioContext, silence the speakers and
+   * restore the original microphone track in all active WebRTC senders.
+   */
+  async function stopNoiseCloak() {
+    noiseCloakEnabled = false;
+
+    // Restore the original mic track in all active call senders.
+    const originalTrack = localStream && localStream.getAudioTracks()[0];
+    for (const call of activeCalls.values()) {
+      if (call.peerConnection && originalTrack) {
+        const sender = call.peerConnection
+          .getSenders()
+          .find((s) => s.track && s.track.kind === "audio");
+        if (sender)
+          await sender.replaceTrack(originalTrack).catch((err) => {
+            showToast("Could not fully restore audio track: " + err.message, "warning");
+          });
+      }
+    }
+
+    if (noiseCloakContext) {
+      noiseCloakContext.close();
+      noiseCloakContext = null;
+    }
+    noiseCloakProcessedTrack = null;
+    noiseCloakStreamGain = null;
+  }
+
+  async function toggleNoiseCloak() {
+    if (noiseCloakEnabled) {
+      await stopNoiseCloak();
+      showToast("Anti-recording noise disabled", "info");
+      const btn = $("btn-noise-cloak");
+      if (btn) btn.classList.remove("active");
+      updateNoiseCloakSidebarBtn(false);
+    } else {
+      const ok = await startNoiseCloak();
+      if (ok) {
+        showToast("Anti-recording noise active — recordings will be distorted", "success");
+        const btn = $("btn-noise-cloak");
+        if (btn) btn.classList.add("active");
+        updateNoiseCloakSidebarBtn(true);
+      }
     }
   }
 
@@ -716,6 +902,7 @@ const VideoChat = (() => {
     endCall,
     hangup,
     toggleNoiseSuppression,
+    toggleNoiseCloak,
     shareScreen,
     stopScreenShare,
     copyRoomLink,
