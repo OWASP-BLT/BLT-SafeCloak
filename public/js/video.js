@@ -947,7 +947,7 @@ const VideoChat = (() => {
     }
     $("call-controls") && $("call-controls").classList.add("hidden");
     updateParticipantsList();
-    updateCallHealthPanel();
+    stopStatsMonitoring();
     showToast("Call ended", "info");
     // Record consent end
     ConsentManager &&
