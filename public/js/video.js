@@ -591,6 +591,7 @@ const VideoChat = (() => {
     noiseCloakStreamGain = null;
     const noiseCloakBtn = $("btn-noise-cloak");
     if (noiseCloakBtn) noiseCloakBtn.classList.remove("active");
+    updateNoiseCloakSidebarBtn(false);
     setDotStatus("offline");
     updateStatus("Disconnected", "muted");
     showToast("Session ended and media released", "success");
@@ -618,6 +619,18 @@ const VideoChat = (() => {
   }
 
   /* ── Anti-recording noise cloak ── */
+
+  /** Sync the sidebar toggle button label and style to match `enabled`. */
+  function updateNoiseCloakSidebarBtn(enabled) {
+    const sidebar = $("btn-noise-cloak-sidebar");
+    if (sidebar) {
+      sidebar.classList.toggle("btn-primary", enabled);
+      sidebar.classList.toggle("btn-secondary", !enabled);
+      sidebar.setAttribute("aria-pressed", enabled ? "true" : "false");
+    }
+    const label = $("noise-cloak-label");
+    if (label) label.textContent = enabled ? "Disable Noise Cloak" : "Enable Noise Cloak";
+  }
 
   /**
    * Start the noise cloak: inject ultrasonic tones (17.5–20 kHz) into the
@@ -741,12 +754,14 @@ const VideoChat = (() => {
       showToast("Anti-recording noise disabled", "info");
       const btn = $("btn-noise-cloak");
       if (btn) btn.classList.remove("active");
+      updateNoiseCloakSidebarBtn(false);
     } else {
       const ok = await startNoiseCloak();
       if (ok) {
         showToast("Anti-recording noise active — recordings will be distorted", "success");
         const btn = $("btn-noise-cloak");
         if (btn) btn.classList.add("active");
+        updateNoiseCloakSidebarBtn(true);
       }
     }
   }
