@@ -176,6 +176,19 @@ body {
 }
 
 /* === Video Controls === */
+.video-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .video-controls {
+    justify-content: center;
+  }
+}
+
 .control-btn {
   width: 44px;
   height: 44px;
