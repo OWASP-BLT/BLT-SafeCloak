@@ -552,6 +552,21 @@ def test_noise_cloak_toggle(base_url):
                     timeout=TIMEOUT_MS,
                 )
 
+            # Wait for the call to be fully established: the remote stream must
+            # be live and the call-controls toolbar must be visible (un-hidden)
+            # before interacting with btn-noise-cloak to avoid a race between
+            # wrapper creation and stream/controls activation.
+            p1.wait_for_function(
+                "!document.getElementById('call-controls').classList.contains('hidden') && "
+                "(() => { "
+                "  const ws = document.querySelectorAll('.video-wrapper'); "
+                "  if (ws.length < 2) return false; "
+                "  const v = ws[1].querySelector('video'); "
+                "  return v !== null && v.srcObject !== null; "
+                "})()",
+                timeout=TIMEOUT_MS,
+            )
+
             # ── Noise-cloak button must be present and initially inactive ─────
             assert p1.is_visible("#btn-noise-cloak"), (
                 "Anti-recording noise button must be visible during a call"
@@ -586,7 +601,19 @@ def test_noise_cloak_toggle(base_url):
             ), "Noise-cloak button should be inactive after disabling"
 
             # ── Call must still be alive after toggle ─────────────────────────
-            assert p1.evaluate(_STREAM_CHECK_JS), (
+            # Use a 1-remote check (not _STREAM_CHECK_JS which expects 2 remotes).
+            _one_remote_stream_js = """(() => {
+                const wrappers = Array.from(document.querySelectorAll('.video-wrapper'));
+                const remotes = wrappers.slice(1);
+                return (
+                    remotes.length === 1 &&
+                    remotes.every(w => {
+                        const v = w.querySelector('video');
+                        return v !== null && v.srcObject !== null;
+                    })
+                );
+            })()"""
+            assert p1.evaluate(_one_remote_stream_js), (
                 "Client 1 should still see Client 2's stream after noise-cloak toggle"
             )
         finally:

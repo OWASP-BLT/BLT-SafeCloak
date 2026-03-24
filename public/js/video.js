@@ -18,6 +18,7 @@ const VideoChat = (() => {
   let noiseCloakEnabled = false;
   let noiseCloakContext = null;
   let noiseCloakProcessedTrack = null;
+  let noiseCloakStreamGain = null;
 
   const state = {
     peerId: null,
@@ -508,6 +509,12 @@ const VideoChat = (() => {
     if (!localStream) return;
     micMuted = !micMuted;
     localStream.getAudioTracks().forEach((t) => (t.enabled = !micMuted));
+    // If the noise cloak is active, also gate its outbound stream gain so that
+    // muting fully silences what peers receive (the cloak oscillators would
+    // otherwise keep transmitting even with the mic track disabled).
+    if (noiseCloakStreamGain) {
+      noiseCloakStreamGain.gain.value = micMuted ? 0 : 1;
+    }
     const btn = $("btn-mic");
     if (btn) {
       btn.textContent = micMuted ? "🔇" : "🎙️";
@@ -581,6 +588,7 @@ const VideoChat = (() => {
       noiseCloakContext = null;
     }
     noiseCloakProcessedTrack = null;
+    noiseCloakStreamGain = null;
     const noiseCloakBtn = $("btn-noise-cloak");
     if (noiseCloakBtn) noiseCloakBtn.classList.remove("active");
     setDotStatus("offline");
@@ -632,26 +640,39 @@ const VideoChat = (() => {
       // Destination that produces a processed MediaStream for WebRTC senders.
       const streamDest = noiseCloakContext.createMediaStreamDestination();
 
+      // Master gain for the outbound (WebRTC) path. Initialized to 0 when the
+      // mic is already muted so that muting fully silences peers even while the
+      // cloak is active. Speaker output is intentionally unaffected by mute.
+      noiseCloakStreamGain = noiseCloakContext.createGain();
+      noiseCloakStreamGain.gain.value = micMuted ? 0 : 1;
+      noiseCloakStreamGain.connect(streamDest);
+
       // Route the local microphone through the noise-cloak graph so voice is
       // still transmitted alongside the protective tones.
       const micSource = noiseCloakContext.createMediaStreamSource(new MediaStream([audioTrack]));
-      micSource.connect(streamDest);
+      micSource.connect(noiseCloakStreamGain);
 
       // Ultrasonic carrier tones — near-inaudible to humans but picked up by
       // recording hardware, causing non-linear distortion artefacts.
-      [17500, 18000, 18500, 19000, 19500, 20000].forEach((freq) => {
-        const osc = noiseCloakContext.createOscillator();
-        const gain = noiseCloakContext.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.value = 0.05;
-        osc.connect(gain);
-        // Inject into the outgoing WebRTC stream.
-        gain.connect(streamDest);
-        // Also emit through the device speakers for physical-room protection.
-        gain.connect(noiseCloakContext.destination);
-        osc.start();
-      });
+      // Only include tones below the Nyquist limit (with a 10% margin) to
+      // prevent aliasing into the audible band on devices with lower sample rates.
+      const nyquist = noiseCloakContext.sampleRate / 2;
+      const maxToneFreq = nyquist * 0.9;
+      [17500, 18000, 18500, 19000, 19500, 20000]
+        .filter((freq) => freq < maxToneFreq)
+        .forEach((freq) => {
+          const osc = noiseCloakContext.createOscillator();
+          const gain = noiseCloakContext.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.value = 0.05;
+          osc.connect(gain);
+          // Inject into the outgoing WebRTC stream (gated by the master gain).
+          gain.connect(noiseCloakStreamGain);
+          // Also emit through the device speakers for physical-room protection.
+          gain.connect(noiseCloakContext.destination);
+          osc.start();
+        });
 
       noiseCloakProcessedTrack = streamDest.stream.getAudioTracks()[0];
 
@@ -679,6 +700,7 @@ const VideoChat = (() => {
         noiseCloakContext = null;
       }
       noiseCloakProcessedTrack = null;
+      noiseCloakStreamGain = null;
       showToast("Anti-recording noise unavailable: " + err.message, "error");
       return false;
     }
@@ -710,6 +732,7 @@ const VideoChat = (() => {
       noiseCloakContext = null;
     }
     noiseCloakProcessedTrack = null;
+    noiseCloakStreamGain = null;
   }
 
   async function toggleNoiseCloak() {
