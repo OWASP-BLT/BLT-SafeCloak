@@ -11,6 +11,7 @@ PAGES_MAP = {
     '/video-chat': 'video-chat.html',
     '/notes': 'notes.html',
     '/consent': 'consent.html',
+    '/in-call': 'in-call.html'
 }
 
 
