@@ -36,26 +36,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggle = document.getElementById("navbar-toggle");
   const nav = document.getElementById("navbar-nav");
   if (toggle && nav) {
-    toggle.addEventListener('click', () => {
-      nav.classList.toggle('hidden');
-      const isOpen = !nav.classList.contains('hidden');
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    toggle.addEventListener("click", () => {
+      nav.classList.toggle("hidden");
+      const isOpen = !nav.classList.contains("hidden");
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     });
 
     // Close on outside click
     document.addEventListener("click", (e) => {
       if (!toggle.contains(e.target) && !nav.contains(e.target)) {
-        nav.classList.add('hidden');
-        toggle.setAttribute('aria-expanded', 'false');
+        nav.classList.add("hidden");
+        toggle.setAttribute("aria-expanded", "false");
       }
     });
 
     // Close menu when a nav link is clicked
-    const navLinks = nav.querySelectorAll('a');
-    navLinks.forEach(link => {
-      link.addEventListener('click', () => {
-        nav.classList.add('hidden');
-        toggle.setAttribute('aria-expanded', 'false');
+    const navLinks = nav.querySelectorAll("a");
+    navLinks.forEach((link) => {
+      link.addEventListener("click", () => {
+        nav.classList.add("hidden");
+        toggle.setAttribute("aria-expanded", "false");
       });
     });
   }
