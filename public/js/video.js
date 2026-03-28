@@ -250,13 +250,18 @@ const VideoChat = (() => {
       showToast("Connected to signaling server", "success");
       // Auto-connect if a room ID was passed in the URL
       const params = new URLSearchParams(window.location.search);
-      const joinId = params.get("room");
-      if (joinId && joinId !== state.peerId) {
+      const joinIdRaw = params.get("room");
+      if (joinIdRaw && isValidRoomId(joinIdRaw)) {
+        const joinId = joinIdRaw.trim();
+      if (joinId !== state.peerId) {
         const remoteInput = $("remote-id");
         if (remoteInput) {
           remoteInput.value = joinId;
         }
         callPeer(joinId);
+      }
+      } else if (joinIdRaw) {
+        showToast("Invalid Room ID","error");
       }
     });
 
