@@ -516,7 +516,8 @@ const VideoChat = (() => {
     localStream.getAudioTracks().forEach((t) => (t.enabled = !micMuted));
     const btn = $("btn-mic");
     if (btn) {
-      btn.textContent = micMuted ? "🔇" : "🎙️";
+      const icon = btn.querySelector("i");
+      if (icon) icon.className = micMuted ? "fa-solid fa-microphone-slash" : "fa-solid fa-microphone";
       btn.title = micMuted ? "Unmute mic" : "Mute mic";
       btn.classList.toggle("active", micMuted);
     }
@@ -529,7 +530,8 @@ const VideoChat = (() => {
     localStream.getVideoTracks().forEach((t) => (t.enabled = !camOff));
     const btn = $("btn-cam");
     if (btn) {
-      btn.textContent = camOff ? "📷" : "🎥";
+      const icon = btn.querySelector("i");
+      if (icon) icon.className = camOff ? "fa-solid fa-video-slash" : "fa-solid fa-video";
       btn.title = camOff ? "Enable camera" : "Disable camera";
       btn.classList.toggle("active", camOff);
     }
