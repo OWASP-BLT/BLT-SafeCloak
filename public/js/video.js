@@ -530,7 +530,8 @@ const VideoChat = (() => {
     localStream.getVideoTracks().forEach((t) => (t.enabled = !camOff));
     const btn = $("btn-cam");
     if (btn) {
-      btn.textContent = camOff ? "📷" : "🎥";
+      const icon = btn.querySelector("i");
+      if (icon) icon.className = camOff ? "fa-solid fa-video-slash" : "fa-solid fa-video";
       btn.title = camOff ? "Enable camera" : "Disable camera";
       btn.classList.toggle("active", camOff);
     }
