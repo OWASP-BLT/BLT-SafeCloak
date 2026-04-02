@@ -28,7 +28,9 @@ class Default(WorkerEntrypoint):
 
         # Handle GET requests for HTML pages
         if request.method == 'GET' and path in PAGES_MAP:
-            html_path = Path(__file__).parent / 'pages' / PAGES_MAP[path]
+            # Use resolve() to handle path normalization on Windows/Unix
+            base_path = Path(__file__).parent.resolve()
+            html_path = base_path / 'pages' / PAGES_MAP[path]
             html_content = html_path.read_text()
             return html_response(html_content)
 

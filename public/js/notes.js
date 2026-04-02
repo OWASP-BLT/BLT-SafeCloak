@@ -76,6 +76,39 @@ const NotesApp = (() => {
     return passphrase;
   }
 
+  async function rotatePassphrase(newPass) {
+    if (!newPass || newPass === passphrase) return;
+    try {
+      // Re-encrypt with the new password
+      await Crypto.saveEncrypted(STORAGE_KEY, notes, newPass);
+      // Update the local storage key
+      localStorage.setItem(PASS_KEY, newPass);
+      passphrase = newPass;
+      updateSecurityUI();
+      showToast("Master password updated and data re-encrypted", "success");
+    } catch (err) {
+      console.error("Passphrase rotation failed:", err);
+      showToast("Failed to update password", "error");
+    }
+  }
+
+  function updateSecurityUI() {
+    const status = document.getElementById("key-status");
+    const display = document.getElementById("display-passphrase");
+    const pass = getPassphrase();
+    const isDefault = pass && pass.length === 24 && !pass.includes(" "); // Rough check for Random ID
+
+    if (status) {
+      if (isDefault) {
+        status.innerHTML = '<i class="fa-solid fa-circle-info mr-1"></i>Default';
+        status.className = "text-[9px] font-extrabold uppercase text-blue-600";
+      } else {
+        status.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i>Manual';
+        status.className = "text-[9px] font-extrabold uppercase text-green-600";
+      }
+    }
+  }
+
   async function saveNotes() {
     try {
       await Crypto.saveEncrypted(STORAGE_KEY, notes, getPassphrase());
@@ -349,6 +382,45 @@ const NotesApp = (() => {
     await loadNotes();
     renderNotesList();
     if (notes.length > 0) setActiveNote(notes[0].id);
+
+    updateSecurityUI();
+
+    // Wire up Recovery Key UI
+    const btnToggle = document.getElementById("btn-toggle-pass");
+    const displayPass = document.getElementById("display-passphrase");
+    if (btnToggle && displayPass) {
+      btnToggle.addEventListener("click", () => {
+        const isHidden = displayPass.type === "password";
+        displayPass.value = getPassphrase();
+        displayPass.type = isHidden ? "text" : "password";
+        btnToggle.innerHTML = isHidden
+          ? '<i class="fa-solid fa-eye-slash text-[10px]"></i>'
+          : '<i class="fa-solid fa-eye text-[10px]"></i>';
+      });
+    }
+
+    const btnCopy = document.getElementById("btn-copy-pass");
+    if (btnCopy) {
+      btnCopy.addEventListener("click", () => {
+        navigator.clipboard.writeText(getPassphrase()).then(() => {
+          showToast("Recovery key copied to clipboard", "success");
+        });
+      });
+    }
+
+    const btnChange = document.getElementById("btn-change-pass");
+    if (btnChange) {
+      btnChange.addEventListener("click", async () => {
+        const newPass = prompt(
+          "Enter a new Master Password.\n\nYour notes will be re-encrypted. Keep this password safe!"
+        );
+        if (newPass && newPass.length >= 8) {
+          await rotatePassphrase(newPass);
+        } else if (newPass !== null) {
+          showToast("Password must be at least 8 characters", "warning");
+        }
+      });
+    }
 
     // Wire up editor inputs
     const titleEl = document.getElementById("note-title");

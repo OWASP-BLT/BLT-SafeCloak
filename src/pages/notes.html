@@ -202,6 +202,59 @@
               </div>
             </div>
             <div class="notes-list" id="notes-list" role="list" aria-label="Notes list"></div>
+
+            <!-- Security & Recovery Section -->
+            <div class="mt-auto border-t border-gray-100 bg-gray-50 p-4 rounded-b-xl">
+              <h3 class="mb-3 text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
+                Security & Recovery
+              </h3>
+              <div class="space-y-2.5">
+                <div class="rounded-lg border border-neutral-border bg-white p-2.5 shadow-sm">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-bold text-gray-700">Recovery Key</span>
+                    <span id="key-status" class="text-[9px] font-extrabold uppercase text-green-600">
+                      <i class="fa-solid fa-circle-check mr-1"></i>Secure
+                    </span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-1.5">
+                    <input
+                      type="password"
+                      id="display-passphrase"
+                      readonly
+                      class="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-mono text-gray-600 focus:outline-none"
+                      value="••••••••••••••••"
+                      title="Encryption Passphrase"
+                    />
+                    <button
+                      id="btn-toggle-pass"
+                      class="flex h-6 w-6 items-center justify-center rounded border border-neutral-border bg-white text-gray-500 hover:text-primary"
+                      title="Show/Hide Key"
+                    >
+                      <i class="fa-solid fa-eye text-[10px]"></i>
+                    </button>
+                    <button
+                      id="btn-copy-pass"
+                      class="flex h-6 w-6 items-center justify-center rounded border border-neutral-border bg-white text-gray-500 hover:text-primary"
+                      title="Copy Key"
+                    >
+                      <i class="fa-solid fa-copy text-[10px]"></i>
+                    </button>
+                  </div>
+                  <p class="mt-2 text-[9px] leading-relaxed text-gray-500">
+                    Keep this key safe! Without it, your encrypted notes cannot be recovered on
+                    other devices.
+                  </p>
+                </div>
+
+                <button
+                  id="btn-change-pass"
+                  class="w-full flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white py-1.5 text-[11px] font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                >
+                  <i class="fa-solid fa-key" aria-hidden="true"></i>
+                  Set Master Password
+                </button>
+              </div>
+            </div>
           </aside>
 
           <div

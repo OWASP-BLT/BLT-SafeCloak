@@ -4,13 +4,13 @@
     "description": "Privacy-focused peer-to-peer communication platform",
     "private": true,
     "scripts": {
-        "dev": "wrangler dev",
+        "dev": "wrangler dev --no-reload",
         "deploy": "wrangler deploy",
         "format": "yapf -i -r src/ && prettier --write \"src/**/*.html\" \"public/**/*.{js,css}\"",
         "format:check": "yapf -d -r src/ && prettier --check \"src/**/*.html\" \"public/**/*.{js,css}\"",
         "typecheck": "mypy src/",
         "check": "npm run format:check && npm run typecheck",
-        "setup": "npm install && python -m  pip install -r requirements-dev.txt",
+        "setup": "npm install && python -m pip install -r requirements-dev.txt",
         "clean": "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
     },
     "keywords": [
@@ -21,9 +21,10 @@
     ],
     "license": "MIT",
     "devDependencies": {
-        "prettier": "^3.2.5",
         "peer": "^1.0.2",
-        "peerjs": "^1.5.5"
+        "peerjs": "^1.5.5",
+        "prettier": "^3.2.5",
+        "wrangler": "^3.114.17"
     },
     "engines": {
         "node": ">=18.0.0",
