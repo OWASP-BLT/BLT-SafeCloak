@@ -62,6 +62,7 @@ const NotesApp = (() => {
   let activeNoteId = null;
   let passphrase = null;
   let saveTimer = null;
+  const USER_FLAG = "safecloak_pass_is_user";
 
   /* ── Persistence ── */
   function getPassphrase() {
@@ -71,6 +72,7 @@ const NotesApp = (() => {
     if (!stored) {
       stored = Crypto.randomId(24);
       localStorage.setItem(PASS_KEY, stored);
+      localStorage.setItem(USER_FLAG, "false");
     }
     passphrase = stored;
     return passphrase;
@@ -78,28 +80,37 @@ const NotesApp = (() => {
 
   async function rotatePassphrase(newPass) {
     if (!newPass || newPass === passphrase) return;
+    const TEMP_KEY = STORAGE_KEY + ".tmp";
     try {
-      // Re-encrypt with the new password
-      await Crypto.saveEncrypted(STORAGE_KEY, notes, newPass);
-      // Update the local storage key
+      // 1. Stage: Re-encrypt to a temporary key
+      await Crypto.saveEncrypted(TEMP_KEY, notes, newPass);
+
+      // 2. Commit: Update the master password ONLY after successful encryption
       localStorage.setItem(PASS_KEY, newPass);
+      localStorage.setItem(USER_FLAG, "true");
+
+      // 3. Finalize: Move temp data to main storage
+      const encryptedData = localStorage.getItem(TEMP_KEY);
+      localStorage.setItem(STORAGE_KEY, encryptedData);
+      localStorage.removeItem(TEMP_KEY);
+
       passphrase = newPass;
       updateSecurityUI();
       showToast("Master password updated and data re-encrypted", "success");
     } catch (err) {
       console.error("Passphrase rotation failed:", err);
-      showToast("Failed to update password", "error");
+      // Clean up temp data if it exists
+      localStorage.removeItem(TEMP_KEY);
+      showToast("Failed to update password at save stage", "error");
     }
   }
 
   function updateSecurityUI() {
     const status = document.getElementById("key-status");
-    const display = document.getElementById("display-passphrase");
-    const pass = getPassphrase();
-    const isDefault = pass && pass.length === 24 && !pass.includes(" "); // Rough check for Random ID
+    const isUserSet = localStorage.getItem(USER_FLAG) === "true";
 
     if (status) {
-      if (isDefault) {
+      if (!isUserSet) {
         status.innerHTML = '<i class="fa-solid fa-circle-info mr-1"></i>Default';
         status.className = "text-[9px] font-extrabold uppercase text-blue-600";
       } else {
@@ -402,9 +413,18 @@ const NotesApp = (() => {
     const btnCopy = document.getElementById("btn-copy-pass");
     if (btnCopy) {
       btnCopy.addEventListener("click", () => {
-        navigator.clipboard.writeText(getPassphrase()).then(() => {
-          showToast("Recovery key copied to clipboard", "success");
-        });
+        if (!navigator.clipboard) {
+          return showToast("Browser does not support clipboard API", "error");
+        }
+        navigator.clipboard
+          .writeText(getPassphrase())
+          .then(() => {
+            showToast("Recovery key copied to clipboard", "success");
+          })
+          .catch((err) => {
+            console.error("Copy failed:", err);
+            showToast("Failed to copy recovery key", "error");
+          });
       });
     }
 

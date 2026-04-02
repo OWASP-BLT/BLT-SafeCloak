@@ -221,12 +221,15 @@
                       type="password"
                       id="display-passphrase"
                       readonly
+                      aria-readonly="true"
+                      aria-label="Encryption passphrase"
                       class="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-mono text-gray-600 focus:outline-none"
                       value="••••••••••••••••"
                       title="Encryption Passphrase"
                     />
                     <button
                       id="btn-toggle-pass"
+                      aria-label="Show or hide recovery key"
                       class="flex h-6 w-6 items-center justify-center rounded border border-neutral-border bg-white text-gray-500 hover:text-primary"
                       title="Show/Hide Key"
                     >
@@ -234,6 +237,7 @@
                     </button>
                     <button
                       id="btn-copy-pass"
+                      aria-label="Copy recovery key"
                       class="flex h-6 w-6 items-center justify-center rounded border border-neutral-border bg-white text-gray-500 hover:text-primary"
                       title="Copy Key"
                     >
@@ -248,6 +252,7 @@
 
                 <button
                   id="btn-change-pass"
+                  aria-label="Set master password"
                   class="w-full flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white py-1.5 text-[11px] font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
                 >
                   <i class="fa-solid fa-key" aria-hidden="true"></i>
