@@ -169,12 +169,13 @@ def method_not_allowed_response(allowed_methods: Iterable[str], message: Optiona
     Returns:
         Response object with JSON error payload
     """
-    methods = ', '.join(allowed_methods)
+    methods_list = list(allowed_methods)
+    methods = ', '.join(methods_list)
     return json_error_response(
         message or 'Method not allowed',
         status=405,
         code='method_not_allowed',
-        extra={'allowed_methods': list(allowed_methods)},
+        extra={'allowed_methods': methods_list},
         headers={
             'Allow': methods,
             'Access-Control-Allow-Methods': methods,

@@ -49,7 +49,7 @@ def _api_features_payload():
         'resources': {
             'notes': {
                 'endpoint': API_NOTES_PATH,
-                'storage': 'client-local',
+                'storage': 'browser-local-storage',
                 'encryption': 'client-side',
                 'placeholder': True,
                 'allowed_methods': list(API_READ_ONLY_METHODS),
@@ -57,7 +57,7 @@ def _api_features_payload():
             },
             'consent': {
                 'endpoint': API_CONSENT_PATH,
-                'storage': 'client-local',
+                'storage': 'browser-local-storage',
                 'integrity': 'client-side-sha256',
                 'placeholder': True,
                 'allowed_methods': list(API_READ_ONLY_METHODS),

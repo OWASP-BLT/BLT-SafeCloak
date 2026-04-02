@@ -23,7 +23,7 @@ sys.modules['workers'] = mock_workers
 # Fix the path so it finds your 'src' folder
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Now the import will work perfectly!
-from src.libs.utils import html_response, json_response, cors_response
+from src.libs.utils import cors_response, html_response, json_response, method_not_allowed_response
 
 
 def test_html_response():
@@ -77,3 +77,12 @@ def test_json_response_default_str_fallback():
     assert response_data["timestamp"] == "2026-03-22 12:00:00"
     actual_set = set(ast.literal_eval(response_data["unique_items"]))
     assert actual_set == {1, 2, 3}
+
+
+def test_method_not_allowed_response_materializes_iterables():
+    response = method_not_allowed_response(method for method in ("GET", "OPTIONS"))
+
+    assert response.status_code == 405
+    assert response.headers["Allow"] == "GET, OPTIONS"
+    assert response.headers["Access-Control-Allow-Methods"] == "GET, OPTIONS"
+    assert json.loads(response.body)["allowed_methods"] == ["GET", "OPTIONS"]
