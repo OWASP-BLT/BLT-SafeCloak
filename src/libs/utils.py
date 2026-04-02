@@ -12,10 +12,10 @@ Key design decisions:
 
 from workers import Response
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Optional
 
 
-def base_headers(content_type: str) -> Dict[str, str]:
+def base_headers(content_type: str, extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """
     Create a base set of headers for all responses.
 
@@ -31,12 +31,16 @@ def base_headers(content_type: str) -> Dict[str, str]:
     Returns:
         Dictionary of headers
     """
-    return {
+    headers = {
         'Content-Type': content_type,
 
-        # Allows any origin to access the response
+        # TODO: Replace wildcard CORS with an explicit allowed-origin config before
+        # exposing any state-changing API routes.
         'Access-Control-Allow-Origin': '*',
     }
+    if extra_headers:
+        headers.update(extra_headers)
+    return headers
 
 
 def html_response(html_str: str, status: int = 200) -> Response:
@@ -83,7 +87,42 @@ def json_response(data: Any, status: int = 200) -> Response:
     )
 
 
-def cors_response(status: int = 204) -> Response:
+def json_error_response(message: str,
+                        status: int = 400,
+                        code: Optional[str] = None,
+                        extra: Optional[Dict[str, Any]] = None,
+                        headers: Optional[Dict[str, str]] = None) -> Response:
+    """
+    Create a JSON error response with a consistent schema.
+
+    Args:
+        message: Human-readable error message
+        status: HTTP status code
+        code: Optional machine-readable error code
+        extra: Optional additional JSON fields
+        headers: Optional extra response headers
+
+    Returns:
+        Response object with JSON error payload
+    """
+    payload = {
+        'error': message,
+        'status': status,
+    }
+    if code:
+        payload['code'] = code
+    if extra:
+        payload.update(extra)
+    return Response(
+        json.dumps(payload, ensure_ascii=False, default=str),
+        status=status,
+        headers=base_headers('application/json; charset=utf-8', headers)
+    )
+
+
+def cors_response(status: int = 204,
+                  allow_methods: str = 'GET, POST, OPTIONS',
+                  allow_headers: str = 'Content-Type') -> Response:
     """
     Create a CORS preflight (OPTIONS) response.
 
@@ -102,17 +141,41 @@ def cors_response(status: int = 204) -> Response:
         None,  # 204 responses should not include a body
         status=status,
         headers={
-            # Allow all origins 
+            # TODO: Replace wildcard CORS with an explicit allowed-origin config before
+            # exposing any state-changing API routes.
             'Access-Control-Allow-Origin': '*',
 
             # Allowed HTTP methods
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Methods': allow_methods,
 
             # Allowed request headers
-            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Headers': allow_headers,
 
             # Cache preflight response (in seconds basically 1 day)
             # Reduces repeated OPTIONS requests
             'Access-Control-Max-Age': '86400',
         }
     )
+
+
+def method_not_allowed_response(allowed_methods: Iterable[str], message: Optional[str] = None) -> Response:
+    """
+    Create a 405 Method Not Allowed response with both Allow and CORS method headers.
+
+    Args:
+        allowed_methods: Iterable of supported HTTP methods
+        message: Optional override for the error message
+
+    Returns:
+        Response object with JSON error payload
+    """
+    methods = ', '.join(allowed_methods)
+    return json_error_response(
+        message or 'Method not allowed',
+        status=405,
+        code='method_not_allowed',
+        extra={'allowed_methods': list(allowed_methods)},
+        headers={
+            'Allow': methods,
+            'Access-Control-Allow-Methods': methods,
+        })
