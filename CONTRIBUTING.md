@@ -12,6 +12,11 @@
 8. Commit and push your changes
 9. Open a pull request
 
+### Setup Environment
+
+1. **Prerequisites**: Install [Node.js and npm](https://nodejs.org/) (preferably via a version manager like [nvm](https://github.com/nvm-sh/nvm)) to run `wrangler` and the PeerJS signaling server.
+2. **Python**: Ensure you have Python >= 3.11 installed.
+
 ```bash
 # Install all development dependencies
 pip install -r requirements-dev.txt

@@ -349,7 +349,8 @@ def peerjs_server():
         if proc.poll() is not None:
             raise RuntimeError(
                 f"PeerJS server exited early (code {proc.returncode}). "
-                f"Command: {cmd}"
+                f"Command: {cmd}. "
+                "Ensure the 'peer' npm package is installed globally or in node_modules."
             )
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=1):
@@ -381,7 +382,8 @@ def base_url(peerjs_server):
     if not _PEERJS_MIN_JS.exists():
         raise FileNotFoundError(
             f"peerjs.min.js not found at {_PEERJS_MIN_JS}. "
-            "Run 'npm install' first."
+            "Ensure the vendored file exists at tests/vendor/peerjs.min.js "
+            "or run 'npm install peerjs' to generate it."
         )
     _AppHandler.peerjs_js = _PEERJS_MIN_JS.read_bytes()
     _AppHandler.peerjs_port = peerjs_server
