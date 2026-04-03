@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import re
 
-from libs.utils import cors_response, html_response, json_response
+from src.libs.utils import cors_response, html_response, json_response
 
 # Route to HTML page mapping
 PAGES_MAP = {
