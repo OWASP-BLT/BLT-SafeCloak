@@ -37,8 +37,6 @@ const ConsentManager = (() => {
   async function record(event) {
     const ts = Date.now();
     const entry = {
-      // Use crypto-random id instead of timestamp + Math.random() to eliminate
-      // collision risk when multiple events are recorded in the same millisecond.
       id: generateId(),
       type: event.type || "recorded", // 'given' | 'withdrawn' | 'recorded'
       name: event.name || "Unnamed event",
@@ -96,10 +94,6 @@ const ConsentManager = (() => {
   async function verifyEntry(id) {
     // Previously used log.find() which returns the first match.
     // With the old timestamp-based ids a collision would cause this to verify
-    // a different entry's hash against the wrong data, silently returning
-    // "untampered" for a record that was never actually checked.
-    // Now ids are 128-bit random hex strings so collisions cannot occur, but
-    // we still validate that exactly one entry matches to surface any corruption.
     const matches = log.filter((e) => e.id === id);
     if (matches.length === 0) return showToast("Entry not found", "error");
     if (matches.length > 1) {
