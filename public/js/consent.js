@@ -18,9 +18,31 @@ const ConsentManager = (() => {
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      log = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(log)) log = [];
-    } catch {
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) {
+      log = [];
+      return;
+    }
+    log = parsed
+      .filter((e) => e && typeof e === "object")
+      .map((e) => ({
+        id: typeof e.id === "string" ? e.id : generateId(),
+        type: typeof e.type === "string" ? e.type : "recorded",
+        name: typeof e.name === "string" ? e.name : "Unnamed event",
+        details: typeof e.details === "string" ? e.details : "",
+        purpose: typeof e.purpose === "string" ? e.purpose : "",
+        participants: Array.isArray(e.participants) ? e.participants : [],
+        timestamp: Number.isFinite(e.timestamp) ? e.timestamp : Date.now(),
+        isoTime: typeof e.isoTime === "string" ? e.isoTime : new Date().toISOString(),
+        hash: typeof e.hash === "string" ? e.hash : "hash-unavailable",
+      }));
+  } catch {
+    log = [];
+  }
+}
       log = [];
     }
   }
