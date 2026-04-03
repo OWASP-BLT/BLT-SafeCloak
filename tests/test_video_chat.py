@@ -56,9 +56,11 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).parent.parent
 
-# Path to peerjs.min.js bundled with the ``peerjs`` npm package (installed
-# via ``npm install``).  Avoids any CDN dependency during tests.
-_PEERJS_MIN_JS = ROOT / "node_modules" / "peerjs" / "dist" / "peerjs.min.js"
+# Path to peerjs.min.js (downloaded via CI or manual setup).
+# Falls back to node_modules if present locally.
+_VENDORED_PEERJS = ROOT / "tests" / "vendor" / "peerjs.min.js"
+_LEGACY_PEERJS = ROOT / "node_modules" / "peerjs" / "dist" / "peerjs.min.js"
+_PEERJS_MIN_JS = _VENDORED_PEERJS if _VENDORED_PEERJS.exists() else _LEGACY_PEERJS
 
 # Seconds to wait for the local PeerJS server to become ready.
 _PEERJS_STARTUP_TIMEOUT = 15

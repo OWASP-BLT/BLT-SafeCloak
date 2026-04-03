@@ -9,8 +9,8 @@
 5. Create a branch: `git checkout -b feature/your-feature-name`
 6. Make your changes
 7. Run checks: `yapf -d -r src/ && mypy src/`
-7. Commit and push your changes
-8. Open a pull request
+8. Commit and push your changes
+9. Open a pull request
 
 ```bash
 # Install all development dependencies
