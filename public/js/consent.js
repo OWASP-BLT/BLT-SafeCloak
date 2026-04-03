@@ -95,7 +95,7 @@ const ConsentManager = (() => {
     const matches = log.filter((e) => e.id === id);
     if (matches.length === 0) return showToast("Entry not found", "error");
     if (matches.length > 1) {
-      return showToast(" Duplicate entry ids detected — log may be corrupted", "error");
+      return showToast("Duplicate entry ids detected — log may be corrupted", "error");
     }
     const entry = matches[0];
     try {
