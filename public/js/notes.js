@@ -411,14 +411,14 @@ const NotesApp = (() => {
     };
   }
 
-  function chooseImportMode(importCount, overlapCount) {
+  function chooseImportMode(rawImportCount, overlapCount) {
     return new Promise((resolve) => {
-      const noteWord = importCount === 1 ? "note" : "notes";
+      const noteWord = rawImportCount === 1 ? "note" : "notes";
       const conflictVerb = overlapCount === 1 ? "is" : "are";
       const conflictSummary =
-        overlapCount === importCount
-          ? `Found <strong>${importCount}</strong> ${noteWord} in the selected import file, out of which all ${conflictVerb} conflicting.`
-          : `Found <strong>${importCount}</strong> ${noteWord} in the selected import file, out of which <strong>${overlapCount}</strong> ${conflictVerb} conflicting.`;
+        overlapCount === rawImportCount
+          ? `Found <strong>${rawImportCount}</strong> ${noteWord} in the selected import file, out of which all ${conflictVerb} conflicting.`
+          : `Found <strong>${rawImportCount}</strong> ${noteWord} in the selected import file, out of which <strong>${overlapCount}</strong> ${conflictVerb} conflicting.`;
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay";
       overlay.style.display = "flex";
@@ -593,7 +593,9 @@ const NotesApp = (() => {
         return;
       }
 
-      const imported = normalizeImportedNotes(parsed).filter(isValidImportedNote);
+      const rawImportedEntries = normalizeImportedNotes(parsed);
+      const rawImportCount = rawImportedEntries.length;
+      const imported = rawImportedEntries.filter(isValidImportedNote);
       if (!imported.length) {
         showToast("Import failed: no valid notes found in file", "error");
         return;
@@ -614,7 +616,7 @@ const NotesApp = (() => {
       const overlapCount = uniqueImported.filter((n) => existingIds.has(normalizeComparableId(n.id))).length;
       let mode = "skip_conflicts";
       if (overlapCount > 0) {
-        mode = await chooseImportMode(uniqueImported.length, overlapCount);
+        mode = await chooseImportMode(rawImportCount, overlapCount);
         if (mode === "cancel") return;
       }
 
@@ -644,7 +646,11 @@ const NotesApp = (() => {
         skippedCount = uniqueImported.length - additions.length;
         addedCount = additions.length;
         if (addedCount === 0) {
-          showToast("No new notes to import. All selected notes already exist by ID.", "info");
+          const entryWord = rawImportCount === 1 ? "entry" : "entries";
+          showToast(
+            `No new notes to import from ${rawImportCount} parsed ${entryWord}. All selected notes already exist by ID.`,
+            "info"
+          );
           return;
         }
         nextNotes = [...additions, ...notes].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -665,17 +671,25 @@ const NotesApp = (() => {
       renderEditor();
 
       if (mode === "replace_conflicts") {
+        const entryWord = rawImportCount === 1 ? "entry" : "entries";
         showToast(
-          `Imported ${addedCount + replacedCount} notes (${addedCount} added, ${replacedCount} replaced)`,
+          `Processed ${rawImportCount} parsed ${entryWord}: ${addedCount + replacedCount} notes imported (${addedCount} added, ${replacedCount} replaced)`,
           "success"
         );
       } else if (skippedCount > 0) {
+        const entryWord = rawImportCount === 1 ? "entry" : "entries";
+        const conflictWord = skippedCount === 1 ? "conflict" : "conflicts";
         showToast(
-          `Imported ${addedCount} new notes and skipped ${skippedCount} conflicts`,
+          `Processed ${rawImportCount} parsed ${entryWord}: imported ${addedCount} new notes and skipped ${skippedCount} ${conflictWord}`,
           "success"
         );
       } else {
-        showToast(`Imported ${addedCount} notes`, "success");
+        const entryWord = rawImportCount === 1 ? "entry" : "entries";
+        const noteWordImported = addedCount === 1 ? "note" : "notes";
+        showToast(
+          `Processed ${rawImportCount} parsed ${entryWord}: imported ${addedCount} ${noteWordImported}`,
+          "success"
+        );
       }
     } catch (err) {
       console.error("Import notes failed:", err);
