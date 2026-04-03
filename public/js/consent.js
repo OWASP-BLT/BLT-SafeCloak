@@ -135,6 +135,10 @@ function load() {
 
   /* ── Delete entry ── */
   function deleteEntry(id) {
+    if (!log.some((e) => e && e.id === id)) {
+      showToast("Entry not found", "error");
+      return;
+    }
     if (!confirm("Delete this consent record? This cannot be undone.")) return;
     const before = log.length;
     log = log.filter((e) => e.id !== id);
