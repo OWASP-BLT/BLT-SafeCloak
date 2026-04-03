@@ -350,10 +350,19 @@ const NotesApp = (() => {
     await loadNotes();
     renderNotesList();
     if (notes.length > 0) setActiveNote(notes[0].id);
-    window.addEventListener("beforeunload", () => {
-      clearTimeout(saveTimer);
-      saveNotes();
+    const flushPendingSave = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      void saveNotes();
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPendingSave();
     });
+    window.addEventListener("pagehide", flushPendingSave);
+    window.addEventListener("beforeunload", flushPendingSave);
 
     // Wire up editor inputs
     const titleEl = document.getElementById("note-title");
