@@ -6,21 +6,6 @@
 const ConsentManager = (() => {
   const STORAGE_KEY = "safecloak_consent_log_v1";
   let log = [];
-
-  /* ── ID generation ──
-   * Previously: Date.now().toString() + Math.random().toString(36).slice(2, 7)
-   *
-   * Bug: Date.now() has millisecond resolution. Two events recorded within the
-   * same millisecond (e.g. rapid consent + session-start during page load) could
-   * produce the same timestamp prefix.  Math.random() adds only ~5 base-36 chars
-   * (~25 bits of entropy), giving a roughly 1-in-33M collision chance per pair —
-   * low but non-zero, and collision would cause verifyEntry() to silently verify
-   * the wrong entry because Array.find() returns the first match.
-   *
-   * Fix: use crypto.getRandomValues() for a 128-bit hex UUID-style token.
-   * This makes collisions astronomically unlikely (1 in 2^128) regardless of
-   * timing, and keeps the id fully opaque and unguessable.
-   */
   function generateId() {
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
@@ -34,7 +19,6 @@ const ConsentManager = (() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       log = raw ? JSON.parse(raw) : [];
-      // Guard: ensure log is always an array even if storage is corrupted.
       if (!Array.isArray(log)) log = [];
     } catch {
       log = [];
