@@ -92,12 +92,9 @@ const ConsentManager = (() => {
 
   /* ── Verify a specific entry ── */
   async function verifyEntry(id) {
-    // Previously used log.find() which returns the first match.
-    // With the old timestamp-based ids a collision would cause this to verify
     const matches = log.filter((e) => e.id === id);
     if (matches.length === 0) return showToast("Entry not found", "error");
     if (matches.length > 1) {
-      // Should never happen with crypto-random ids, but handle defensively.
       return showToast("⚠️ Duplicate entry ids detected — log may be corrupted", "error");
     }
     const entry = matches[0];
@@ -120,7 +117,6 @@ const ConsentManager = (() => {
     const before = log.length;
     log = log.filter((e) => e.id !== id);
     if (log.length === before) {
-      // Nothing was removed — id didn't match any entry.
       showToast("Entry not found", "error");
       return;
     }
