@@ -77,10 +77,6 @@ const NotesApp = (() => {
   }
 
   async function saveNotes() {
-    // Previously the catch block only logged to console, so a save failure
-    // (e.g. localStorage quota exceeded or crypto error) was invisible to the
-    // user. Notes could be silently lost on the next page load.
-    // Fix: surface a toast so the user knows to export their notes manually.
     try {
       await Crypto.saveEncrypted(STORAGE_KEY, notes, getPassphrase());
     } catch (err) {
