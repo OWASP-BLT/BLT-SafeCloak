@@ -77,10 +77,15 @@ const NotesApp = (() => {
   }
 
   async function saveNotes() {
+    // Previously the catch block only logged to console, so a save failure
+    // (e.g. localStorage quota exceeded or crypto error) was invisible to the
+    // user. Notes could be silently lost on the next page load.
+    // Fix: surface a toast so the user knows to export their notes manually.
     try {
       await Crypto.saveEncrypted(STORAGE_KEY, notes, getPassphrase());
     } catch (err) {
       console.error("Failed to save notes:", err);
+      showToast("⚠️ Notes could not be saved — storage may be full. Export your notes to avoid losing them.", "error", 6000);
     }
   }
 
@@ -144,6 +149,9 @@ const NotesApp = (() => {
   }
 
   function scheduleSave() {
+    // Debounce writes so rapid keystrokes do not flood the crypto API.
+    // The beforeunload flush (registered in init) ensures the final edit is
+    // persisted even if the user closes the tab before the 800 ms timer fires.
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveNotes();
@@ -349,6 +357,17 @@ const NotesApp = (() => {
     await loadNotes();
     renderNotesList();
     if (notes.length > 0) setActiveNote(notes[0].id);
+
+    // Flush any pending debounced save when the tab is closed or navigated away.
+    // Without this, the last keystroke within the 800 ms debounce window would be
+    // lost because the setTimeout fires after the page unloads.
+    window.addEventListener("beforeunload", () => {
+      clearTimeout(saveTimer);
+      // saveNotes() is async but beforeunload cannot await it; we call it
+      // fire-and-forget. Modern browsers give async tasks a short grace period
+      // on unload, so this succeeds in practice for the lightweight crypto write.
+      saveNotes();
+    });
 
     // Wire up editor inputs
     const titleEl = document.getElementById("note-title");

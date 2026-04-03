@@ -7,11 +7,35 @@ const ConsentManager = (() => {
   const STORAGE_KEY = "safecloak_consent_log_v1";
   let log = [];
 
+  /* ── ID generation ──
+   * Previously: Date.now().toString() + Math.random().toString(36).slice(2, 7)
+   *
+   * Bug: Date.now() has millisecond resolution. Two events recorded within the
+   * same millisecond (e.g. rapid consent + session-start during page load) could
+   * produce the same timestamp prefix.  Math.random() adds only ~5 base-36 chars
+   * (~25 bits of entropy), giving a roughly 1-in-33M collision chance per pair —
+   * low but non-zero, and collision would cause verifyEntry() to silently verify
+   * the wrong entry because Array.find() returns the first match.
+   *
+   * Fix: use crypto.getRandomValues() for a 128-bit hex UUID-style token.
+   * This makes collisions astronomically unlikely (1 in 2^128) regardless of
+   * timing, and keeps the id fully opaque and unguessable.
+   */
+  function generateId() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
   /* ── Load / Save ── */
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       log = raw ? JSON.parse(raw) : [];
+      // Guard: ensure log is always an array even if storage is corrupted.
+      if (!Array.isArray(log)) log = [];
     } catch {
       log = [];
     }
@@ -29,7 +53,9 @@ const ConsentManager = (() => {
   async function record(event) {
     const ts = Date.now();
     const entry = {
-      id: ts.toString() + Math.random().toString(36).slice(2, 7),
+      // Use crypto-random id instead of timestamp + Math.random() to eliminate
+      // collision risk when multiple events are recorded in the same millisecond.
+      id: generateId(),
       type: event.type || "recorded", // 'given' | 'withdrawn' | 'recorded'
       name: event.name || "Unnamed event",
       details: event.details || "",
@@ -84,8 +110,19 @@ const ConsentManager = (() => {
 
   /* ── Verify a specific entry ── */
   async function verifyEntry(id) {
-    const entry = log.find((e) => e.id === id);
-    if (!entry) return showToast("Entry not found", "error");
+    // Previously used log.find() which returns the first match.
+    // With the old timestamp-based ids a collision would cause this to verify
+    // a different entry's hash against the wrong data, silently returning
+    // "untampered" for a record that was never actually checked.
+    // Now ids are 128-bit random hex strings so collisions cannot occur, but
+    // we still validate that exactly one entry matches to surface any corruption.
+    const matches = log.filter((e) => e.id === id);
+    if (matches.length === 0) return showToast("Entry not found", "error");
+    if (matches.length > 1) {
+      // Should never happen with crypto-random ids, but handle defensively.
+      return showToast("⚠️ Duplicate entry ids detected — log may be corrupted", "error");
+    }
+    const entry = matches[0];
     try {
       const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}`;
       const hash = await Crypto.sha256(data);
@@ -102,7 +139,13 @@ const ConsentManager = (() => {
   /* ── Delete entry ── */
   function deleteEntry(id) {
     if (!confirm("Delete this consent record? This cannot be undone.")) return;
+    const before = log.length;
     log = log.filter((e) => e.id !== id);
+    if (log.length === before) {
+      // Nothing was removed — id didn't match any entry.
+      showToast("Entry not found", "error");
+      return;
+    }
     save();
     renderLog("consent-log");
     showToast("Consent record deleted", "info");
