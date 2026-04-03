@@ -4,56 +4,51 @@
 
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/BLT-SafeCloak.git`
-3. Install dependencies: `npm install && npm run setup`
-4. Create a branch: `git checkout -b feature/your-feature-name`
-5. Make your changes
-6. Run checks: `npm run check`
+3. Install dependencies: `pip install -r requirements-dev.txt`
+4. Install Playwright: `playwright install chromium --with-deps`
+5. Create a branch: `git checkout -b feature/your-feature-name`
+6. Make your changes
+7. Run checks: `yapf -d -r src/ && mypy src/`
 7. Commit and push your changes
 8. Open a pull request
 
-## Development Workflow
-
-### Setup Environment
-
 ```bash
-# Install all dependencies
-npm install
-npm run setup
+# Install all development dependencies
+pip install -r requirements-dev.txt
+
+# Install Playwright browsers
+playwright install chromium --with-deps
 
 # Verify installation
-npm run check
+npx wrangler --version
 ```
 
 ### Running Locally
 
 ```bash
-# Start development server with hot reload
-npm run dev
+# Start development server
+npx wrangler dev --no-reload
 ```
 
 Access the application at `http://localhost:8787`.
 
-### Code Quality
-
-Before submitting a PR, ensure your code passes all checks:
-
 ```bash
-# Auto-format all code (Python + HTML/CSS/JS)
-npm run format
+# Auto-format Python code
+yapf -i -r src/
 
 # Check formatting without modifying files
-npm run format:check
+yapf -d -r src/
 
 # Type checking (Python)
-npm run typecheck
+mypy src/
 
 # Run all checks (format check + type check)
-npm run check
+yapf -d -r src/ && mypy src/
 ```
 
 **Format Tools Used:**
 - **Python**: yapf (PEP 8, 100 char line limit)
-- **HTML/CSS/JS**: Prettier (consistent web formatting)
+- **HTML/CSS/JS**: CDN-based (no local build required)
 
 ### Testing Changes
 
@@ -66,8 +61,7 @@ These tests use a **local PeerJS signaling server** (no dependency on the public
 **Prerequisites:**
 
 ```bash
-# Install all Node and Python dependencies
-npm install
+# Install development dependencies
 pip install -r requirements-dev.txt
 
 # Install the Playwright browser driver
@@ -228,10 +222,10 @@ if path == '/new-page':
 
 ```bash
 # View logs in real-time
-wrangler tail
+npx wrangler tail
 
 # Debug with local inspector
-npm run dev
+npx wrangler dev --inspect
 # Open: chrome://inspect
 ```
 
@@ -250,7 +244,7 @@ wrangler secret put SECRET_NAME
 ### PR Checklist
 
 - [ ] Code follows style guidelines
-- [ ] All checks pass (`npm run check`)
+- [ ] All checks pass (`yapf -d -r src/ && mypy src/`)
 - [ ] Changes are documented
 - [ ] Commit messages are clear
 - [ ] No merge conflicts
