@@ -19,25 +19,26 @@ Privacy-focused peer-to-peer communication platform built on Cloudflare Workers.
 
 ## Requirements
 
-- Node.js >= 18.0.0
-- Python >= 3.11
+- Python >= 3.12
 - Cloudflare account (for deployment)
+- Node.js >= 18.0.0 (optional) — only if you want to keep Prettier for web assets
 
 ## Installation
-
 ```bash
-# Install Node dependencies
-npm install
+# One-time init if needed (creates/updates config):
+uvx --from workers-py pywrangler init
 
-# Install Python development tools
-npm run setup
+# Install local dev tools (yapf/mypy/pywrangler)
+uv sync --group dev
 ```
 
 ## Development
 
+## Development
 ```bash
-# Start local development server
-npm run dev
+# Start local dev server (http://localhost:8787)
+uv run pywrangler dev
+```
 
 # Format all code (Python + HTML/CSS/JS)
 npm run format
@@ -61,12 +62,11 @@ The development server runs on `http://localhost:8787` with hot reload enabled.
 - Run `npm run format` to format all files at once
 
 ## Deployment
-
-Deploy to Cloudflare Workers:
-
 ```bash
-npm run deploy
+uv run pywrangler deploy
 ```
+
+Tip: If you prefer to keep Prettier for HTML/CSS/JS, continue to run it via Node locally.
 
 ### Project Structure
 

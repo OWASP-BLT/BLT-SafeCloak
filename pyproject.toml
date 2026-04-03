@@ -3,15 +3,17 @@ name = "blt-safecloak"
 version = "0.1.0"
 description = "Privacy-focused peer-to-peer communication platform"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 license = { text = "MIT" }
 
 dependencies = [
     # Add your production dependencies here
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "workers-py",
+    "workers-runtime-sdk",
     "yapf>=0.40.0",
     "mypy>=1.8.0",
 ]
