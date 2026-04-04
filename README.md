@@ -64,8 +64,6 @@ The development server runs on `http://localhost:8787` with hot reload enabled.
 uv run pywrangler deploy
 ```
 
-Tip: If you prefer to keep Prettier for HTML/CSS/JS, continue to run it via Node locally.
-
 ### Project Structure
 
 ```
