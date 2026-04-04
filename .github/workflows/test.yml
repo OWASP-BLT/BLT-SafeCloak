@@ -10,33 +10,21 @@ jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Install Node dependencies
-        run: npm ci
+      - name: Add uv to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install Python dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Install dependencies
+        run: uv sync --group dev
 
       - name: Install Playwright browser
-        run: playwright install chromium --with-deps
+        run: uv run playwright install chromium --with-deps
 
-      - name: Run video chat E2E tests
-        run: pytest tests/ -v --tb=short
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
