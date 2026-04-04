@@ -1,3 +1,5 @@
+.PHONY: format format-check lint lint-fix typecheck check dev
+
 # -------- Formatting --------
 format:
 	uv run yapf -i -r src/
