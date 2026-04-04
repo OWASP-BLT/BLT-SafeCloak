@@ -18,6 +18,8 @@ dev = [
     "mypy>=1.8.0",
     "pytest>=8.0.0",
     "playwright>=1.44.0",
+    "djlint>=1.36.4",
+    "ruff>=0.15.9",
 ]
 
 [build-system]
@@ -41,3 +43,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.djlint]
+profile = "django"
+indent = 2

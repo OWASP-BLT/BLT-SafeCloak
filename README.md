@@ -21,7 +21,6 @@ Privacy-focused peer-to-peer communication platform built on Cloudflare Workers.
 
 - Python >= 3.12
 - Cloudflare account (for deployment)
-- Node.js >= 18.0.0 (optional) — only if you want to keep Prettier for web assets
 
 ## Installation
 ```bash
@@ -38,26 +37,32 @@ uv sync --group dev
 # Start local dev server (http://localhost:8787)
 uv run pywrangler dev
 
-# Format all code (Python + HTML/CSS/JS)
-npm run format
+# Format all code (Python + HTML)
+make format
 
-# Check code quality (formatting + type checking)
-npm run check
+# Check code quality (formatting + type checking + linting)
+make check
+
+# Fix linting issues automatically
+make lint-fix
 
 # Type checking only
-npm run typecheck
+make typecheck
 
 # Check formatting without modifying
-npm run format:check
+make format-check
 ```
 
 The development server runs on `http://localhost:8787` with hot reload enabled.
 
-### Code Formatting
+### Code Quality & Formatting
 
-- **Python**: yapf (PEP 8 style, 100 char line limit)
-- **HTML/CSS/JS**: Prettier (consistent web formatting)
-- Run `npm run format` to format all files at once
+- **Python**: yapf (PEP 8 style)
+- **HTML**: djlint
+- **Linting**: ruff
+- **Type checking**: mypy
+
+Run `make format` to format code, and `make check` to validate everything.
 
 ## Deployment
 ```bash
