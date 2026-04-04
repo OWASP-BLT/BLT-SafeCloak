@@ -2,9 +2,9 @@ name: Video Chat E2E Tests
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   e2e-tests:
@@ -17,6 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -28,9 +37,6 @@ jobs:
 
       - name: Install Playwright browser
         run: playwright install chromium --with-deps
-
-      - name: Install PeerJS signaling server
-        run: npm install -g peer
 
       - name: Run video chat E2E tests
         run: pytest tests/ -v --tb=short

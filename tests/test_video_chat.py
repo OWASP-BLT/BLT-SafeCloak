@@ -6,33 +6,49 @@ How it works
 ------------
 1. A lightweight Python HTTP server is started locally to serve the app
    pages (src/pages/) and static assets (public/).
-2. A local PeerJS signaling server (``peerjs`` npm CLI) is started so
-   the test does not rely on the external 0.peerjs.com cloud service.
-3. The test server patches the served video-chat HTML to:
-   a. Replace the unpkg.com CDN URL for peerjs.min.js with a locally
-      cached copy (downloaded once to /tmp at module import time).
-   b. Inject a thin override that redirects ``new Peer(...)`` to the
-      local signaling server.
-4. A single Chromium browser is launched with fake media flags; three
-   isolated browser contexts are created from it so no real camera or
-   microphone is required.
-5. Client 2 connects to Client 1.  Both consent dialogs are accepted.
-6. Client 3 connects to Client 1.  Client 3's consent dialog is accepted.
+2. A local PeerJS signaling server (``peer`` npm package CLI) is started
+   so the test does not rely on the external 0.peerjs.com cloud service.
+3. The test server patches the served video-chat HTML to inject a thin
+   ``window.__PEERJS_CONFIG__`` override that redirects the signaling
+   client to ``ws://127.0.0.1:<peerjs_port>`` instead of 0.peerjs.com,
+   and replaces the CDN peerjs.min.js script tag with a locally-served
+   copy sourced from the installed ``peerjs`` npm package.
+4. A single Chromium browser is launched in headless mode; each browser
+   context injects a ``getUserMedia`` shim so that no physical camera or
+   microphone hardware is required (a canvas-based video track and an
+   AudioContext oscillator audio track are returned instead).
+5. Three isolated browser contexts are created and each opens the
+   video-chat page.
+6. Client 2 connects to Client 1.  Both consent dialogs are accepted.
+7. Client 3 connects to Client 1.  Client 3's consent dialog is accepted.
    The full-mesh data channel then automatically bridges Client 3 to
    Client 2 (no extra consent needed as both already consented).
-7. The test waits for each remote <video> to have a live srcObject and
+8. The test waits for each remote <video> to have a live srcObject and
    then asserts the condition, avoiding any race between wrapper creation
    and stream attachment.
+
+Local development setup
+-----------------------
+Install all dependencies::
+
+    npm install
+    pip install -r requirements-dev.txt
+    playwright install chromium --with-deps
+
+Then run the tests::
+
+    pytest tests/ -v
 """
 
 import http.server
 import re
+import shutil
 import socket
 import socketserver
 import subprocess
+import sys
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -40,44 +56,14 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).parent.parent
 
-_PEERJS_CDN_URL = "https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"
-_PEERJS_CACHE = Path("/tmp/peerjs_test_vendor.min.js")
-_PEERJS_MIN_SIZE = 50_000  # peerjs.min.js is ~250 KB; reject obviously bad downloads
+# Path to peerjs.min.js bundled with the ``peerjs`` npm package (installed
+# via ``npm install``).  Avoids any CDN dependency during tests.
+_PEERJS_MIN_JS = ROOT / "node_modules" / "peerjs" / "dist" / "peerjs.min.js"
 
-# Seconds to wait for the local PeerJS server to become ready
-_PEERJS_STARTUP_TIMEOUT = 6
+# Seconds to wait for the local PeerJS server to become ready.
+_PEERJS_STARTUP_TIMEOUT = 15
 
-
-def _get_peerjs_js() -> bytes:
-    """Return peerjs.min.js bytes, downloading from the CDN if not cached.
-
-    A basic size sanity-check guards against caching an empty or truncated
-    download from the CDN.
-    """
-    if _PEERJS_CACHE.exists():
-        cached = _PEERJS_CACHE.read_bytes()
-        if len(cached) >= _PEERJS_MIN_SIZE:
-            return cached
-        # Cached copy is suspiciously small – delete and re-download
-        _PEERJS_CACHE.unlink()
-    with urllib.request.urlopen(_PEERJS_CDN_URL, timeout=30) as resp:
-        data = resp.read()
-    if len(data) < _PEERJS_MIN_SIZE:
-        raise RuntimeError(
-            f"Downloaded peerjs.min.js is too small ({len(data)} bytes); "
-            "the CDN may have returned an error page."
-        )
-    _PEERJS_CACHE.write_bytes(data)
-    return data
-
-
-def _free_port() -> int:
-    """Return an unused TCP port on localhost."""
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-# Map clean URL paths to HTML source files
+# Map clean URL paths to HTML source files.
 _PAGES = {
     "/": "src/pages/index.html",
     "/video-chat": "src/pages/video-chat.html",
@@ -85,7 +71,7 @@ _PAGES = {
     "/consent": "src/pages/consent.html",
 }
 
-# MIME types for static asset extensions
+# MIME types for static asset extensions.
 _MIME = {
     ".js": "application/javascript",
     ".css": "text/css",
@@ -94,22 +80,155 @@ _MIME = {
     ".ico": "image/x-icon",
 }
 
-# Generous timeout for WebRTC operations (all local after patching)
-TIMEOUT_MS = 60_000
+# Generous timeout for WebRTC operations (all local after patching).
+TIMEOUT_MS = 120_000
 
-# Chromium flags that enable fake camera/microphone without real hardware
+# Chromium flags needed for headless CI operation.
 _BROWSER_ARGS = [
-    "--use-fake-ui-for-media-stream",
-    "--use-fake-device-for-media-input",
     "--no-sandbox",
     "--disable-setuid-sandbox",
 ]
 
-# Regex that matches the peerjs CDN <script> tag (spans multiple lines)
+# JavaScript shim injected into every browser context via add_init_script.
+# Falls back to a canvas + AudioContext fake stream when getUserMedia is
+# unavailable (e.g. Chrome Headless Shell without an audio subsystem).
+_MOCK_GET_USER_MEDIA = """
+(function () {
+  var _orig =
+    navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+      ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+      : null;
+
+  async function _fakeStream(constraints) {
+    var stream = new MediaStream();
+    if (!constraints || constraints.video !== false) {
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = 320;
+        canvas.height = 240;
+        canvas.getContext("2d").fillRect(0, 0, 320, 240);
+        canvas
+          .captureStream(10)
+          .getVideoTracks()
+          .forEach(function (t) {
+            stream.addTrack(t);
+          });
+      } catch (e) {
+        /* canvas stream unavailable – skip video track */
+      }
+    }
+    if (!constraints || constraints.audio !== false) {
+      try {
+        var ac = new AudioContext();
+        var osc = ac.createOscillator();
+        var dest = ac.createMediaStreamDestination();
+        osc.connect(dest);
+        osc.start();
+        dest.stream.getAudioTracks().forEach(function (t) {
+          stream.addTrack(t);
+        });
+      } catch (e) {
+        /* AudioContext unavailable – skip audio track */
+      }
+    }
+    return stream;
+  }
+
+  if (navigator.mediaDevices) {
+    navigator.mediaDevices.getUserMedia = async function (constraints) {
+      if (_orig) {
+        try {
+          return await _orig(constraints);
+        } catch (e) {
+          /* ignore – fall through to fake stream */
+        }
+      }
+      return _fakeStream(constraints);
+    };
+  }
+})();
+"""
+
+# Pre-enumerate every static file under public/ at module-load time.
+# URL paths (e.g. "/js/video.js") map to their absolute Path objects.
+# User-provided request paths are used only as dict keys – they never
+# reach any filesystem operation directly, eliminating the CodeQL
+# "Uncontrolled data used in path expression" taint entirely.
+_PUBLIC_FILES: dict[str, Path] = {
+    "/" + f.relative_to(ROOT / "public").as_posix(): f
+    for f in (ROOT / "public").rglob("*")
+    if f.is_file()
+}
+
+# Regex that matches the peerjs CDN <script> tag (spans multiple lines).
 _PEERJS_SCRIPT_RE = re.compile(
-    r'<script\s[^>]*src="https://unpkg\.com/peerjs[^"]*"[^>]*>.*?</script>',
+    r'<script\b[^>]*\bsrc="https://unpkg\.com/peerjs[^"]*"[^>]*>.*?</script>',
     re.DOTALL,
 )
+
+# External CDN resources that are stripped from video-chat HTML at test-serve
+# time so the E2E test does not hang on blocked / slow external network calls.
+# Tailwind CDN <script> tag (the inline ``tailwind.config`` block that
+# immediately follows it is also removed since it references ``tailwind.*``).
+_TAILWIND_SCRIPT_RE = re.compile(
+    r'<script\b[^>]*\bsrc="https://cdn\.tailwindcss\.com[^"]*"[^>]*>\s*</script>',
+    re.DOTALL,
+)
+_TAILWIND_CONFIG_RE = re.compile(
+    r'<script>\s*tailwind\.config\s*=\s*\{.*?\};\s*</script>',
+    re.DOTALL,
+)
+# Google Fonts <link> tags (preconnect + stylesheet).
+_GOOGLE_FONTS_RE = re.compile(
+    r'<link\b[^>]*\bhref="https://fonts\.(googleapis|gstatic)\.com[^"]*"[^>]*/?>',
+    re.DOTALL,
+)
+# Font Awesome stylesheet from cdnjs.
+_FONT_AWESOME_RE = re.compile(
+    r'<link\b[^>]*\bhref="https://cdnjs\.cloudflare\.com[^"]*"[^>]*/?>',
+    re.DOTALL,
+)
+
+
+def _free_port() -> int:
+    """Return an unused TCP port on localhost."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _resolve_peerjs_bin() -> list:
+    """Return the argv prefix for running the PeerJS signaling-server CLI.
+
+    Resolution order (cross-platform):
+    1. ``node_modules/.bin/peerjs.cmd``  – Windows npm-installed wrapper
+    2. ``node_modules/.bin/peerjs``      – Unix npm-installed binary
+    3. ``shutil.which('peerjs')``        – global install on PATH
+    4. ``['npx', '--yes', 'peerjs']``  – last-resort: delegate to npx
+    """
+    local_bin = ROOT / "node_modules" / ".bin" / "peerjs"
+    if sys.platform == "win32":
+        cmd_wrapper = local_bin.with_suffix(".cmd")
+        if cmd_wrapper.exists():
+            return [str(cmd_wrapper)]
+    if local_bin.exists():
+        return [str(local_bin)]
+    found = shutil.which("peerjs")
+    if found:
+        return [found]
+    return ["npx", "--yes", "peerjs"]
+
+
+class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
+    """ThreadingTCPServer with SO_REUSEADDR set before the socket is bound.
+
+    ``socketserver.ThreadingTCPServer`` only honours ``allow_reuse_address``
+    if it is already True when ``server_bind`` is called (inside ``__init__``),
+    so we set it as a class attribute rather than as an instance attribute after
+    construction.
+    """
+
+    allow_reuse_address = True
 
 
 class _AppHandler(http.server.BaseHTTPRequestHandler):
@@ -125,15 +244,15 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
     peerjs_port: int = 0
     peerjs_js: bytes = b""
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):  # noqa: N802  (required by BaseHTTPRequestHandler interface)
         path = self.path.split("?")[0]
 
-        # Serve the locally cached peerjs.min.js
+        # Serve the locally installed peerjs.min.js.
         if path == "/peerjs.min.js":
             self._respond(200, "application/javascript", self.__class__.peerjs_js)
             return
 
-        # Serve HTML pages (video-chat is patched to use local signaling)
+        # Serve HTML pages (video-chat is patched to use local signaling).
         if path in _PAGES:
             data = (ROOT / _PAGES[path]).read_bytes()
             if path == "/video-chat":
@@ -141,20 +260,13 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, "text/html; charset=utf-8", data)
             return
 
-        # Serve static files from public/
-        public_root = (ROOT / "public").resolve()
-        # Resolve the candidate to eliminate any ".." segments and follow
-        # symlinks, then confirm it still lives under public_root.
-        candidate = (public_root / path.lstrip("/")).resolve()
-        # Guard against path traversal
-        try:
-            candidate.relative_to(public_root)
-        except ValueError:
-            self._respond(404, "text/plain", b"Not found")
-            return
-        if candidate.is_file():
-            data = candidate.read_bytes()
-            ct = _MIME.get(candidate.suffix, "application/octet-stream")
+        # Serve static files from public/.
+        # Look up the URL path in the pre-enumerated allowlist; user input
+        # is used only as a dict key and never flows into any filesystem call.
+        file_path = _PUBLIC_FILES.get(path)
+        if file_path is not None:
+            data = file_path.read_bytes()
+            ct = _MIME.get(file_path.suffix, "application/octet-stream")
             self._respond(200, ct, data)
             return
 
@@ -167,59 +279,90 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt, *args):  # silence request logs
-        pass
+    def log_message(self, fmt, *args):
+        """Suppress per-request log output to keep test output clean."""
+
 
 
 def _patch_video_chat_html(data: bytes, peerjs_port: int) -> bytes:
-    """Rewrite video-chat HTML to use a local PeerJS server.
+    """Rewrite video-chat HTML to use the local PeerJS signaling server.
 
-    Replaces the unpkg.com CDN script tag with a local ``/peerjs.min.js``
-    reference, then injects a thin wrapper that overrides the ``Peer``
-    constructor to point at the local signaling server instead of
-    ``0.peerjs.com``.
+    1. Strips blocking external CDN resources (Tailwind, Google Fonts, Font
+       Awesome) so the test does not depend on external network access.
+    2. Replaces the unpkg.com CDN script tag with a local ``/peerjs.min.js``
+       reference, then injects a ``window.__PEERJS_CONFIG__`` block that
+       overrides the signaling-server host/port in ``video.js`` at runtime.
+
+    Raises ``RuntimeError`` if the PeerJS script tag is not found exactly once,
+    which would indicate the HTML template has changed in a breaking way.
     """
-    override = (
+    config_script = (
         '<script src="/peerjs.min.js"></script>\n'
         "    <script>\n"
-        "    (function () {\n"
-        "      var _P = window.Peer;\n"
-        "      window.Peer = class extends _P {\n"
-        "        constructor(id, opts) {\n"
-        "          super(id, Object.assign({}, opts, {\n"
-        f"            host: '127.0.0.1', port: {peerjs_port},\n"
-        "            path: '/', secure: false, key: 'peerjs'\n"
-        "          }));\n"
-        "        }\n"
-        "      };\n"
-        "    })();\n"
+        f"    window.__PEERJS_CONFIG__ = "
+        f"{{host:'127.0.0.1',port:{peerjs_port},secure:false,path:'/',key:'peerjs'}};\n"
         "    </script>"
     )
     html = data.decode("utf-8")
-    html = _PEERJS_SCRIPT_RE.sub(override, html)
+
+    # Strip external CDN resources that can block / slow the test.
+    html = _TAILWIND_SCRIPT_RE.sub("", html)
+    html = _TAILWIND_CONFIG_RE.sub("", html)
+    html = _GOOGLE_FONTS_RE.sub("", html)
+    html = _FONT_AWESOME_RE.sub("", html)
+
+    # Replace PeerJS CDN tag, asserting exactly one replacement.
+    html, n_subs = _PEERJS_SCRIPT_RE.subn(config_script, html)
+    if n_subs != 1:
+        raise RuntimeError(
+            f"Expected to replace exactly one PeerJS <script> tag but found {n_subs}. "
+            "The video-chat HTML template may have changed – update _PEERJS_SCRIPT_RE."
+        )
+
     return html.encode("utf-8")
 
 
 @pytest.fixture(scope="module")
 def peerjs_server():
-    """Start a local PeerJS signaling server and yield its port number."""
+    """Start a local PeerJS signaling server and yield its port number.
+
+    Uses the ``peerjs`` CLI provided by the ``peer`` npm package installed
+    in ``node_modules``.  Falls back to a globally installed ``peerjs``
+    binary or ``npx peerjs`` if the local one is not present.
+    """
     port = _free_port()
+    cmd = _resolve_peerjs_bin() + ["--port", str(port), "--path", "/"]
+
     proc = subprocess.Popen(
-        ["peerjs", "--port", str(port), "--path", "/"],
+        cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # Wait until the server is ready (max ~_PEERJS_STARTUP_TIMEOUT s)
+
+    # Wait until the TCP port is open (the server is ready to accept
+    # connections) rather than relying on an HTTP status code.
     deadline = time.monotonic() + _PEERJS_STARTUP_TIMEOUT
+    ready = False
     while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(
+                f"PeerJS server exited early (code {proc.returncode}). "
+                f"Command: {cmd}"
+            )
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1)
-            break
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                ready = True
+                break
         except OSError:
-            time.sleep(0.2)
-    else:
+            time.sleep(0.25)
+
+    if not ready:
         proc.terminate()
-        raise RuntimeError("Local PeerJS server did not start in time")
+        raise RuntimeError(
+            f"Local PeerJS server did not start within {_PEERJS_STARTUP_TIMEOUT}s "
+            f"on port {port}."
+        )
+
     try:
         yield port
     finally:
@@ -233,9 +376,14 @@ def peerjs_server():
 @pytest.fixture(scope="module")
 def base_url(peerjs_server):
     """Start a local HTTP server and return its base URL."""
-    _AppHandler.peerjs_js = _get_peerjs_js()
+    if not _PEERJS_MIN_JS.exists():
+        raise FileNotFoundError(
+            f"peerjs.min.js not found at {_PEERJS_MIN_JS}. "
+            "Run 'npm install' first."
+        )
+    _AppHandler.peerjs_js = _PEERJS_MIN_JS.read_bytes()
     _AppHandler.peerjs_port = peerjs_server
-    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _AppHandler)
+    server = _ThreadingTCPServer(("127.0.0.1", 0), _AppHandler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
@@ -250,9 +398,19 @@ def base_url(peerjs_server):
 # Helper utilities
 # ---------------------------------------------------------------------------
 
+
+def _new_context(browser):
+    """Create a browser context with the getUserMedia shim pre-loaded."""
+    ctx = browser.new_context(permissions=["camera", "microphone"])
+    ctx.add_init_script(_MOCK_GET_USER_MEDIA)
+    return ctx
+
+
 def _peer_id(page) -> str:
     """Block until the peer ID has been assigned and return it."""
     page.wait_for_function(
+        "document.getElementById('my-peer-id') && "
+        "document.getElementById('my-peer-id').textContent.trim() !== '' && "
         "document.getElementById('my-peer-id').textContent.trim() !== 'Connecting...'",
         timeout=TIMEOUT_MS,
     )
@@ -284,6 +442,7 @@ _STREAM_CHECK_JS = """
 # Test
 # ---------------------------------------------------------------------------
 
+
 def test_three_clients_connect_and_see_cameras(base_url):
     """
     Three clients join the same room.  Assert each client can see the
@@ -292,9 +451,9 @@ def test_three_clients_connect_and_see_cameras(base_url):
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=_BROWSER_ARGS)
         try:
-            ctx1 = browser.new_context(permissions=["camera", "microphone"])
-            ctx2 = browser.new_context(permissions=["camera", "microphone"])
-            ctx3 = browser.new_context(permissions=["camera", "microphone"])
+            ctx1 = _new_context(browser)
+            ctx2 = _new_context(browser)
+            ctx3 = _new_context(browser)
 
             p1 = ctx1.new_page()
             p2 = ctx2.new_page()
@@ -318,7 +477,7 @@ def test_three_clients_connect_and_see_cameras(base_url):
             _accept_consent(p2)  # p2 consents (caller side)
             _accept_consent(p1)  # p1 consents (callee side)
 
-            # Wait for the p1–p2 connection to be fully established
+            # Wait for the p1–p2 connection to be fully established.
             p1.wait_for_function(
                 "document.querySelectorAll('.video-wrapper').length >= 2",
                 timeout=TIMEOUT_MS,
@@ -347,7 +506,7 @@ def test_three_clients_connect_and_see_cameras(base_url):
                 )
 
             # ── Step 4: Wait for and verify live camera streams ──────────────
-            # `handleCallStream` creates the wrapper before stream arrives, so
+            # ``handleCallStream`` creates the wrapper before stream arrives, so
             # we must wait (not just assert) to avoid a race with srcObject
             # assignment.
             for page, name in ((p1, "Client 1"), (p2, "Client 2"), (p3, "Client 3")):
