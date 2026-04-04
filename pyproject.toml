@@ -7,12 +7,12 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
+    "workers-py",
     # Add your production dependencies here
 ]
 
 [dependency-groups]
 dev = [
-    "workers-py",
     "workers-runtime-sdk",
     "yapf>=0.40.0",
     "mypy>=1.8.0",
