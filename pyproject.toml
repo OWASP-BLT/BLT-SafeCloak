@@ -3,7 +3,7 @@ name = "blt-safecloak"
 version = "0.1.0"
 description = "Privacy-focused peer-to-peer communication platform"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [

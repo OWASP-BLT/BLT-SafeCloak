@@ -34,11 +34,9 @@ uv sync --group dev
 
 ## Development
 
-## Development
 ```bash
 # Start local dev server (http://localhost:8787)
 uv run pywrangler dev
-```
 
 # Format all code (Python + HTML/CSS/JS)
 npm run format
