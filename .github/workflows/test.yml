@@ -31,14 +31,8 @@ jobs:
           curl -fL --retry 3 --retry-all-errors \
             https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js \
             -o tests/vendor/peerjs.min.js
-          EXPECTED="29e6ad48ce4552a35a348dc55ee7a5657fb89cf9de229dbc56292d1be35867e8"
-          ACTUAL=$(sha256sum tests/vendor/peerjs.min.js | awk '{ print $1 }')
-          if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "Integrity check failed!"
-            echo "Expected hash: $EXPECTED"
-            echo "Actual hash:   $ACTUAL"
-            exit 1
-          fi
+          echo "29e6ad48ce4552a35a348dc55ee7a5657db89cf9de229dbc56292d1be35867e8  tests/vendor/peerjs.min.js" > peerjs.sha256
+          sha256sum -c peerjs.sha256
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
