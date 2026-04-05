@@ -1,9 +1,15 @@
 # pylint: disable=too-few-public-methods
+import json
 from workers import WorkerEntrypoint, Response
 from urllib.parse import urlparse
 from pathlib import Path
 
-from libs.utils import html_response, cors_response
+try:
+    # Local tests/imports often use src.* package paths.
+    from src.libs.utils import html_response, cors_response, base_headers
+except ModuleNotFoundError:
+    # Cloudflare Python runtime loads main module from inside src/.
+    from libs.utils import html_response, cors_response, base_headers
 
 # Route to HTML page mapping
 PAGES_MAP = {
@@ -12,6 +18,37 @@ PAGES_MAP = {
     '/notes': 'notes.html',
     '/consent': 'consent.html',
 }
+
+
+def _origin(url) -> str:
+    return f'{url.scheme}://{url.netloc}'
+
+
+def _manifest_payload(origin: str) -> dict:
+    return {
+        'name': 'BLT-SafeCloak',
+        'short_name': 'SafeCloak',
+        'description': 'Privacy-focused peer-to-peer communication platform.',
+        'start_url': '/',
+        'scope': '/',
+        'display': 'standalone',
+        'background_color': '#ffffff',
+        'theme_color': '#E10101',
+        'icons': [
+            {
+                'src': f'{origin}/img/logo.png',
+                'sizes': '192x192',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+            {
+                'src': f'{origin}/img/logo.png',
+                'sizes': '512x512',
+                'type': 'image/png',
+                'purpose': 'any',
+            },
+        ],
+    }
 
 
 class Default(WorkerEntrypoint):
@@ -25,6 +62,16 @@ class Default(WorkerEntrypoint):
         # Handle CORS preflight
         if request.method == 'OPTIONS':
             return cors_response()
+
+        if request.method == 'GET':
+            origin = _origin(url)
+
+            if path == '/manifest.json':
+                return Response(
+                    json.dumps(_manifest_payload(origin)),
+                    status=200,
+                    headers=base_headers('application/manifest+json; charset=utf-8'),
+                )
 
         # Handle GET requests for HTML pages
         if request.method == 'GET' and path in PAGES_MAP:
