@@ -60,8 +60,8 @@ def test_manifest_endpoint_returns_web_manifest():
     manifest = json.loads(response.body)
     assert manifest['name'] == 'BLT-SafeCloak'
     assert manifest['start_url'] == '/'
+    assert len(manifest['icons']) == 1
     assert manifest['icons'][0]['src'] == 'https://example.com/img/logo.png'
-    assert manifest['icons'][1]['src'] == 'https://example.com/img/logo.png'
 
 
 def test_options_requests_return_cors_preflight_response():

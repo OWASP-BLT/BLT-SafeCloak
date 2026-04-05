@@ -5,11 +5,9 @@ from urllib.parse import urlparse
 from pathlib import Path
 
 try:
-    # Local tests/imports often use src.* package paths.
-    from src.libs.utils import html_response, cors_response, base_headers
-except ModuleNotFoundError:
-    # Cloudflare Python runtime loads main module from inside src/.
     from libs.utils import html_response, cors_response, base_headers
+except ModuleNotFoundError:
+    from src.libs.utils import html_response, cors_response, base_headers
 
 # Route to HTML page mapping
 PAGES_MAP = {
@@ -40,12 +38,6 @@ def _manifest_payload(origin: str) -> dict:
                 'sizes': '192x192',
                 'type': 'image/png',
                 'purpose': 'any maskable',
-            },
-            {
-                'src': f'{origin}/img/logo.png',
-                'sizes': '512x512',
-                'type': 'image/png',
-                'purpose': 'any',
             },
         ],
     }

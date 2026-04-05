@@ -45,8 +45,11 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const networkResponse = await fetch(event.request);
-          const cache = await caches.open(CACHE_NAME);
-          cache.put(event.request, networkResponse.clone());
+          const url = new URL(event.request.url);
+          if (url.origin === self.location.origin && networkResponse.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, networkResponse.clone());
+          }
           return networkResponse;
         } catch {
           const url = new URL(event.request.url);
@@ -77,7 +80,15 @@ self.addEventListener("fetch", (event) => {
         return networkResponse;
       } catch {
         const url = new URL(event.request.url);
-        return caches.match(url.pathname);
+        const cachedByPath = await caches.match(url.pathname);
+        if (cachedByPath) {
+          return cachedByPath;
+        }
+
+        return new Response("Offline and resource unavailable", {
+          status: 503,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
       }
     })
   );
