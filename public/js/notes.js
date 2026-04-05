@@ -82,8 +82,8 @@ const NotesApp = (() => {
     if (!newPass || newPass === passphrase) return;
     const TEMP_KEY = STORAGE_KEY + ".tmp";
     try {
-      // 1. Stage
-      await Crypto.saveEncrypted(TEMP_KEY, notes, newPass);
+      // 1. Stage: re-encrypt using the final STORAGE_KEY as the salt
+      await Crypto.saveEncrypted(TEMP_KEY, notes, newPass, STORAGE_KEY);
 
       // 2. Promote FIRST
       const encryptedData = localStorage.getItem(TEMP_KEY);
@@ -436,7 +436,7 @@ const NotesApp = (() => {
     const inputConfirm = document.getElementById("modal-confirm-pass");
     const btnCancel = document.getElementById("modal-cancel");
 
-    if (btnChange && modal) {
+    if (btnChange && modal && modalForm && inputNew && inputConfirm && btnCancel) {
       btnChange.addEventListener("click", () => {
         inputNew.value = "";
         inputConfirm.value = "";

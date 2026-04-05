@@ -6,11 +6,18 @@ Thank you for your interest in contributing to BLT-SafeCloak! This guide will he
 
 1.  **Fork the repository** on GitHub.
 2.  **Clone your fork** locally.
-3.  **Local Testing**:
+3.  **Setup Environment**:
+    ```bash
+    # Install Python development tools
+    pip install -r requirements-dev.txt
+
+    # Install Playwright browsers
+    playwright install chromium --with-deps
+    ```
+4.  **Local Testing (after setup)**:
     ```bash
     # Download the PeerJS library to tests/vendor/
-    mkdir -p tests/vendor
-    curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
+    mkdir -p tests/vendor && curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
     
     # Run tests
     pytest tests/ -v
@@ -32,7 +39,7 @@ playwright install chromium --with-deps
 
 ```bash
 # Start development server
-npx wrangler dev
+npx wrangler dev --no-reload
 ```
 
 ### Local Testing
@@ -41,15 +48,14 @@ To run the full E2E test suite locally:
 
 1. **Vendor PeerJS**: Download the library to `tests/vendor/` to avoid external network calls:
    ```bash
-   mkdir -p tests/vendor
-   curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
+   mkdir -p tests/vendor && curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
    ```
 2. **Run tests**:
    ```bash
    pytest tests/ -v
    ```
 
-## Development Workflow
+## Technical Standards
 
 Access the application at `http://localhost:8787`.
 

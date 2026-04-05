@@ -383,6 +383,7 @@ def base_url(peerjs_server):
         raise FileNotFoundError(
             f"peerjs.min.js not found at {_PEERJS_MIN_JS}. "
             "Download it manually: "
+            "mkdir -p tests/vendor && "
             "curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js "
             "-o tests/vendor/peerjs.min.js"
         )

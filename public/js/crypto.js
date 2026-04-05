@@ -92,20 +92,25 @@ const Crypto = (() => {
       .join("");
   }
 
-  /** Encrypt an object and store in localStorage */
-  async function saveEncrypted(storageKey, obj, passphrase) {
-    const key = await deriveKey(passphrase, storageKey);
+  /** Encrypt an object and store in localStorage
+   *  @param {string} storageKey - Where to save the object
+   *  @param {any} obj - Plain object to encrypt
+   *  @param {string} passphrase - Secret passphrase
+   *  @param {string} saltIdentifier - Optional: override the salt derivation (defaults to storageKey)
+   */
+  async function saveEncrypted(storageKey, obj, passphrase, saltIdentifier) {
+    const key = await deriveKey(passphrase, saltIdentifier || storageKey);
     const json = JSON.stringify(obj);
     const encrypted = await encrypt(json, key);
     localStorage.setItem(storageKey, JSON.stringify(encrypted));
   }
 
   /** Load and decrypt an object from localStorage */
-  async function loadEncrypted(storageKey, passphrase) {
+  async function loadEncrypted(storageKey, passphrase, saltIdentifier) {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     try {
-      const key = await deriveKey(passphrase, storageKey);
+      const key = await deriveKey(passphrase, saltIdentifier || storageKey);
       const payload = JSON.parse(raw);
       const json = await decrypt(payload, key);
       return JSON.parse(json);
