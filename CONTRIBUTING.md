@@ -1,139 +1,80 @@
 # Contributing to BLT-SafeCloak
 
+Thank you for your interest in contributing to BLT-SafeCloak! This guide will help you get started.
+
 ## Getting Started
 
-1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/BLT-SafeCloak.git`
-3. Install dependencies: `pip install -r requirements-dev.txt`
-4. Install Playwright: `playwright install chromium --with-deps`
-5. Create a branch: `git checkout -b feature/your-feature-name`
-6. Make your changes
-7. Run checks: `yapf -d -r src/ && mypy src/`
-8. Commit and push your changes
-9. Open a pull request
+1.  **Fork the repository** on GitHub.
+2.  **Clone your fork** locally.
+3.  **Local Testing**:
+    ```bash
+    # Download the PeerJS library to tests/vendor/
+    mkdir -p tests/vendor
+    curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
+    
+    # Run tests
+    pytest tests/ -v
+    ```
 
-### Setup Environment
+## Development Workflow
 
-1. **Prerequisites**: Install [Node.js and npm](https://nodejs.org/) (preferably via a version manager like [nvm](https://github.com/nvm-sh/nvm)) to run `wrangler` and the PeerJS signaling server.
-2. **Python**: Ensure you have Python >= 3.11 installed.
+### Setup
 
 ```bash
-# Install all development dependencies
+# Install Python development tools
 pip install -r requirements-dev.txt
 
 # Install Playwright browsers
 playwright install chromium --with-deps
-
-# Verify installation
-npx wrangler --version
 ```
 
 ### Running Locally
 
 ```bash
 # Start development server
-npx wrangler dev --no-reload
+npx wrangler dev
 ```
+
+### Local Testing
+
+To run the full E2E test suite locally:
+
+1. **Vendor PeerJS**: Download the library to `tests/vendor/` to avoid external network calls:
+   ```bash
+   mkdir -p tests/vendor
+   curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js -o tests/vendor/peerjs.min.js
+   ```
+2. **Run tests**:
+   ```bash
+   pytest tests/ -v
+   ```
+
+## Development Workflow
 
 Access the application at `http://localhost:8787`.
 
-```bash
-# Auto-format Python code
-yapf -i -r src/
+### Code Style
 
-# Check formatting without modifying files
-yapf -d -r src/
-
-# Type checking (Python)
-mypy src/
-
-# Run all checks (format check + type check)
-yapf -d -r src/ && mypy src/
-```
-
-**Format Tools Used:**
-- **Python**: yapf (PEP 8, 100 char line limit)
-- **HTML/CSS/JS**: CDN-based (no local build required)
-
-### Testing Changes
-
-#### E2E Video Chat Tests
-
-The repository includes automated end-to-end tests for the video chat feature.  
-These tests use a **local PeerJS signaling server** (no dependency on the public
-`0.peerjs.com` server) for reliability in CI and local development.
-
-**Prerequisites:**
-
-```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Install the Playwright browser driver
-playwright install chromium --with-deps
-```
-
-**Running the tests:**
-
-```bash
-pytest tests/ -v
-```
-
-The test suite will automatically:
-1. Start a local PeerJS signaling server (port chosen dynamically)
-2. Spin up a lightweight HTTP server to serve the app pages
-3. Launch headless Chromium with fake camera/microphone devices
-4. Tear everything down after the tests complete
-
-No network access to external signaling or backend services is required.
-The served pages load static assets (Tailwind CSS, Google Fonts, Font Awesome)
-from their public CDNs; the test server strips those CDN tags so the E2E test
-runs without any external network dependency.
-
-1. Test all affected pages manually
-2. Verify WebRTC functionality in multiple browsers
-3. Test consent flow end-to-end
-4. Verify encryption/decryption works correctly
-
-## Code Style
-
-### Python
-
-- Follow PEP 8 guidelines
-- Use type hints for all functions
-- Maximum line length: 100 characters
-- Use meaningful variable names
-- Add docstrings for complex functions
-
-### JavaScript
-
-- Use modern ES6+ syntax
-- Prefer `const` over `let`, avoid `var`
-- Use async/await for asynchronous operations
-- Comment complex logic
-- Keep functions small and focused
-
-### HTML/CSS
-
-- Semantic HTML5 elements
-- Accessible markup (ARIA labels where needed)
+- **Python**: Follow PEP 8 (yapf format).
+- **JavaScript**: Functional approach, use Crypto Web API for encryption.
+- **CSS**: Tailwind CSS for styling.
 - Mobile-first responsive design
 - BEM naming convention for CSS classes
 
-## Project Structure (e.g., `feature.html`)
-2. Add route to `PAGES_MAP` dictionary in `src/main.py`:
+### Project Structure
+
+To add a new feature or page (e.g., `feature.html`):
+
+1. **Create HTML**: Add your file to the `src/pages/` directory.
+2. **Add JavaScript**: Place any corresponding logic in `public/js/`.
+3. **Add Route**: Define the path in the `PAGES_MAP` dictionary in `src/main.py`:
    ```python
    PAGES_MAP = {
        '/': 'index.html',
-       '/feature': 'feature.html',  # Add your route
+       '/feature': 'feature.html',
    }
    ```
-3. Add corresponding JavaScript in `public/js/` if needed
-4. Update navigation in all HTML pages with clean URL (e.g., `/feature`)
-1. Create HTML file in `src/pages/`
-2. Add corresponding JavaScript in `public/js/`
-3. Add route handler in `src/main.py`
-4. Update navigation if needed
+4. **Update Navigation**: Ensure all navigation bars in the HTML pages point to the new clean URL (e.g., `/feature`).
 
 ### Adding New Features
 
@@ -148,55 +89,6 @@ runs without any external network dependency.
 
 - [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
 - [Python Workers Guide](https://developers.cloudflare.com/workers/languages/python/)
-- [Wrangler CLI Documentation](https://developers.cloudflare.com/workers/wrangler/)
-- [Workers Examples](https://developers.cloudflare.com/workers/examples/)
-
-### Python Workers Specific
-
-- [Python Workers Runtime API](https://developers.cloudflare.com/workers/languages/python/runtime-apis/)
-- [Python Workers Bindings](https://developers.cloudflare.com/workers/languages/python/bindings/)
-- [Migrating from JavaScript to Python](https://developers.cloudflare.com/workers/languages/python/how-it-works/)
-
-### Key Concepts
-
-- [Request/Response Objects](https://developers.cloudflare.com/workers/runtime-apis/request/)
-- [Workers Assets](https://developers.cloudflare.com/workers/static-assets/)
-- [Environment Variables](https://developers.cloudflare.com/workers/configuration/environment-variables/)
-- [KV Storage](https://developers.cloudflare.com/kv/)
-- [Durable Objects](https://developers.cloudflare.com/durable-objects/)
-
-### WebRTC & Real-time Communication
-
-- [Workers WebSockets](https://developers.cloudflare.com/workers/runtime-apis/websockets/)
-- [Durable Objects for Real-time](https://developers.cloudflare.com/durable-objects/examples/websocket-server/)
-- [WebRTC Signaling Server Pattern](https://developers.cloudflare.com/calls/turn/)
-
-### Performance & Best Practices
-
-- [Workers Best Practices](https://developers.cloudflare.com/workers/best-practices/)
-- [Performance Tips](https://developers.cloudflare.com/workers/best-practices/performance/)
-- [Security Best Practices](https://developers.cloudflare.com/workers/best-practices/security/)
-
-### Tutorials & Learning
-
-- [Workers Interactive Tutorial](https://workers.cloudflare.com/)
-- [Build a WebSocket Server](https://developers.cloudflare.com/durable-objects/examples/websocket-server/)
-- [Static Site Hosting](https://developers.cloudflare.com/workers/static-assets/get-started/)
-
-### Community Resources
- - Add to PAGES_MAP dictionary
-PAGES_MAP = {
-    '/': 'index.html',
-    '/video-chat': 'video-chat.html',
-    '/notes': 'notes.html',
-    '/consent': 'consent.html',
-    '/new-page': 'new-page.html',  # Add your new route here
-}
-```
-
-The routing is handled automatically by the `PAGES_MAP` dictionary. Create the HTML file in `src/pages/` and add the mapping.
-
-### Creating Response Utilities
 
 Use helper functions from `src/libs/utils.py`:
 
@@ -210,7 +102,9 @@ return html_response("<h1>Hello</h1>")
 return json_response({"status": "success"})
 
 # CORS preflight
-return cors_response(mmon Tasks
+return cors_response()
+
+## Common Tasks
 
 ### Adding a New Route
 
@@ -228,70 +122,4 @@ if path == '/new-page':
 ```bash
 # View logs in real-time
 npx wrangler tail
-
-# Debug with local inspector
-npx wrangler dev --inspect
-# Open: chrome://inspect
 ```
-
-### Environment Variables
-
-```bash
-# Set secrets (production)
-wrangler secret put SECRET_NAME
-
-# Local development
-# Add to .dev.vars file (gitignored)
-```
-
-## Pull Request Guidelines
-
-### PR Checklist
-
-- [ ] Code follows style guidelines
-- [ ] All checks pass (`yapf -d -r src/ && mypy src/`)
-- [ ] Changes are documented
-- [ ] Commit messages are clear
-- [ ] No merge conflicts
-- [ ] Tested in development environment
-
-### PR Title Format
-
-```
-feat: Add new feature
-fix: Fix bug in component
-docs: Update documentation
-refactor: Refactor code
-style: Format code
-test: Add tests
-chore: Update dependencies
-```
-
-### Description Template
-
-```markdown
-## Changes
-Brief description of what changed
-
-## Motivation
-Why this change is needed
-
-## Testing
-How to test the changes
-
-## Screenshots (if applicable)
-Add screenshots for UI changes
-```
-
-## Questions?
-
-- Open an issue for bugs or feature requests
-- Join discussions in existing issues
-- Tag maintainers for urgent matters
-
-## Code of Conduct
-
-- Be respectful and inclusive
-- Focus on constructive feedback
-- Help others learn and grow
-- Follow OWASP community guidelines

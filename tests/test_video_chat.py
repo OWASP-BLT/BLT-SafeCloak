@@ -382,8 +382,9 @@ def base_url(peerjs_server):
     if not _PEERJS_MIN_JS.exists():
         raise FileNotFoundError(
             f"peerjs.min.js not found at {_PEERJS_MIN_JS}. "
-            "Ensure the vendored file exists at tests/vendor/peerjs.min.js "
-            "or run 'npm install peerjs' to generate it."
+            "Download it manually: "
+            "curl -fL https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js "
+            "-o tests/vendor/peerjs.min.js"
         )
     _AppHandler.peerjs_js = _PEERJS_MIN_JS.read_bytes()
     _AppHandler.peerjs_port = peerjs_server

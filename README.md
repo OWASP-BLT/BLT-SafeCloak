@@ -51,7 +51,7 @@ mypy src/
 yapf -d -r src/
 ```
 
-The development server runs on `http://localhost:8787` with hot reload enabled.
+The development server runs on `http://localhost:8787`. Hot reload is disabled (`--no-reload`) for stability.
 
 ### Code Formatting
 

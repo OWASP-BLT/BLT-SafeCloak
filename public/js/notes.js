@@ -82,16 +82,18 @@ const NotesApp = (() => {
     if (!newPass || newPass === passphrase) return;
     const TEMP_KEY = STORAGE_KEY + ".tmp";
     try {
-      // 1. Stage: Re-encrypt to a temporary key
+      // 1. Stage
       await Crypto.saveEncrypted(TEMP_KEY, notes, newPass);
 
-      // 2. Commit: Update the master password ONLY after successful encryption
+      // 2. Promote FIRST
+      const encryptedData = localStorage.getItem(TEMP_KEY);
+      localStorage.setItem(STORAGE_KEY, encryptedData);
+
+      // 3. Commit passphrase ONLY after storage is safe
       localStorage.setItem(PASS_KEY, newPass);
       localStorage.setItem(USER_FLAG, "true");
 
-      // 3. Finalize: Move temp data to main storage
-      const encryptedData = localStorage.getItem(TEMP_KEY);
-      localStorage.setItem(STORAGE_KEY, encryptedData);
+      // 4. Cleanup
       localStorage.removeItem(TEMP_KEY);
 
       passphrase = newPass;
@@ -99,7 +101,6 @@ const NotesApp = (() => {
       showToast("Master password updated and data re-encrypted", "success");
     } catch (err) {
       console.error("Passphrase rotation failed:", err);
-      // Clean up temp data if it exists
       localStorage.removeItem(TEMP_KEY);
       showToast("Failed to update password at save stage", "error");
     }
@@ -429,16 +430,41 @@ const NotesApp = (() => {
     }
 
     const btnChange = document.getElementById("btn-change-pass");
-    if (btnChange) {
-      btnChange.addEventListener("click", async () => {
-        const newPass = prompt(
-          "Enter a new Master Password.\n\nYour notes will be re-encrypted. Keep this password safe!"
-        );
-        if (newPass && newPass.length >= 8) {
-          await rotatePassphrase(newPass);
-        } else if (newPass !== null) {
-          showToast("Password must be at least 8 characters", "warning");
+    const modal = document.getElementById("password-modal");
+    const modalForm = document.getElementById("password-modal-form");
+    const inputNew = document.getElementById("modal-new-pass");
+    const inputConfirm = document.getElementById("modal-confirm-pass");
+    const btnCancel = document.getElementById("modal-cancel");
+
+    if (btnChange && modal) {
+      btnChange.addEventListener("click", () => {
+        inputNew.value = "";
+        inputConfirm.value = "";
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        inputNew.focus();
+      });
+
+      btnCancel.addEventListener("click", () => {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      });
+
+      modalForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const newPass = inputNew.value;
+        const confirmPass = inputConfirm.value;
+
+        if (!newPass || newPass.length < 8) {
+          return showToast("Password must be at least 8 characters", "warning");
         }
+        if (newPass !== confirmPass) {
+          return showToast("Passwords do not match", "warning");
+        }
+
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+        await rotatePassphrase(newPass);
       });
     }
 
