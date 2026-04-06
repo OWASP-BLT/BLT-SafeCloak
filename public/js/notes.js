@@ -67,6 +67,19 @@ const NotesApp = (() => {
   function getPassphrase() {
     if (passphrase) return passphrase;
     let stored = sessionStorage.getItem(PASS_KEY);
+    // One-time migration for users upgrading from localStorage-based PASS_KEY.
+    if (!stored) {
+      const legacy = localStorage.getItem(PASS_KEY);
+      if (legacy) {
+        stored = legacy;
+        sessionStorage.setItem(PASS_KEY, stored);
+        localStorage.removeItem(PASS_KEY);
+      }
+    }
+    // Prevent silent data loss when ciphertext exists but key is unavailable.
+    if (!stored && localStorage.getItem(STORAGE_KEY)) {
+      throw new Error("Missing decryption key for existing encrypted notes");
+    }
     if (!stored) {
       stored = Crypto.randomId(24);
       sessionStorage.setItem(PASS_KEY, stored);
