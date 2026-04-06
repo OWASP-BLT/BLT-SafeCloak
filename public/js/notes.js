@@ -2,19 +2,62 @@
  * BLT-SafeCloak — notes.js
  * Encrypted AI notes with Web Crypto API (AES-GCM) + client-side AI features
  */
+
 const NotesApp = (() => {
   const STORAGE_KEY = "safecloak_notes_v1";
   const PASS_KEY = "safecloak_notes_pass";
   const PREVIEW_LENGTH = 60;
-
   const STOPWORDS = new Set([
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of",
-    "with", "by", "is", "was", "are", "were", "be", "been", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might",
-    "this", "that", "these", "those", "it", "its", "i", "you", "we", "they",
-    "he", "she", "his", "her", "our", "your", "their",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "is",
+    "was",
+    "are",
+    "were",
+    "be",
+    "been",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "i",
+    "you",
+    "we",
+    "they",
+    "he",
+    "she",
+    "his",
+    "her",
+    "our",
+    "your",
+    "their",
   ]);
-
   let notes = [];
   let activeNoteId = null;
   let passphrase = null;
@@ -23,30 +66,11 @@ const NotesApp = (() => {
   /* ── Persistence ── */
   function getPassphrase() {
     if (passphrase) return passphrase;
-
     let stored = sessionStorage.getItem(PASS_KEY);
-
-    // One-time migration for users upgrading from localStorage-based PASS_KEY.
-    if (!stored) {
-      const legacy = localStorage.getItem(PASS_KEY);
-      if (legacy) {
-        stored = legacy;
-        sessionStorage.setItem(PASS_KEY, stored);
-        localStorage.removeItem(PASS_KEY);
-      }
-    }
-
-    // Prevent silent data loss when ciphertext exists but key is unavailable.
-    if (!stored && localStorage.getItem(STORAGE_KEY)) {
-      throw new Error("Missing decryption key for existing encrypted notes");
-    }
-
     if (!stored) {
       stored = Crypto.randomId(24);
       sessionStorage.setItem(PASS_KEY, stored);
     }
-
-    // Set and return the passphrase (this must be at the top level)
     passphrase = stored;
     return passphrase;
   }
@@ -82,7 +106,7 @@ const NotesApp = (() => {
     scheduleSave();
     renderNotesList();
     setActiveNote(note.id);
-    document.getElementById("note-title")?.focus();
+    document.getElementById("note-title") && document.getElementById("note-title").focus();
     showToast("New note created", "success");
     return note;
   }
@@ -103,14 +127,11 @@ const NotesApp = (() => {
     if (!activeNoteId) return;
     const note = notes.find((n) => n.id === activeNoteId);
     if (!note) return;
-
     const title = document.getElementById("note-title");
     const body = document.getElementById("note-body");
-
     if (title) note.title = title.value || "Untitled Note";
     if (body) note.content = body.value;
     note.updatedAt = Date.now();
-
     // Update list without full re-render
     const item = document.querySelector(`.note-item[data-id="${activeNoteId}"]`);
     if (item) {
@@ -118,7 +139,6 @@ const NotesApp = (() => {
       item.querySelector(".note-item-preview").textContent = note.content.slice(0, PREVIEW_LENGTH);
       item.querySelector(".note-item-date").textContent = formatDateShort(note.updatedAt);
     }
-
     scheduleSave();
   }
 
@@ -133,12 +153,10 @@ const NotesApp = (() => {
   function renderNotesList() {
     const container = document.getElementById("notes-list");
     if (!container) return;
-
     if (!notes.length) {
       container.innerHTML = `<div class="text-muted text-small" style="padding:1rem;text-align:center">No notes yet.<br>Click <strong>+ New</strong> to create one.</div>`;
       return;
     }
-
     container.innerHTML = notes
       .map(
         (n) => `
@@ -187,6 +205,7 @@ const NotesApp = (() => {
     if (body) body.value = note.content;
     if (aiOutput) aiOutput.textContent = "";
 
+    // Update word count
     updateWordCount(note.content);
   }
 
@@ -198,52 +217,64 @@ const NotesApp = (() => {
     wc.textContent = `${words} words · ${chars} chars`;
   }
 
-  /* ── AI Features ── */
+  /* ── AI Features (client-side text processing) ── */
   function summarize(text) {
     if (!text.trim()) return "(no content to summarize)";
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    const words = text.toLowerCase().split(/\s+/).filter((w) => w.length > 4);
+    // Score sentences by keyword frequency
+    const words = text
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 4);
     const freq = {};
-    words.forEach((w) => (freq[w] = (freq[w] || 0) + 1));
-
+    words.forEach((w) => {
+      freq[w] = (freq[w] || 0) + 1;
+    });
     const scored = sentences
       .map((s) => ({
         s,
-        score: s.toLowerCase().split(/\s+/).reduce((sum, w) => sum + (freq[w] || 0), 0),
+        score: s
+          .toLowerCase()
+          .split(/\s+/)
+          .reduce((sum, w) => sum + (freq[w] || 0), 0),
       }))
       .sort((a, b) => b.score - a.score);
-
+    // Top 3 sentences in original order
     const top = scored.slice(0, Math.min(3, scored.length)).map((x) => x.s.trim());
     const indices = top.map((t) => sentences.indexOf(t)).sort((a, b) => a - b);
-
     return "📝 Summary:\n" + indices.map((i) => sentences[i].trim()).join(" ");
   }
 
   function extractKeyPoints(text) {
     if (!text.trim()) return "(no content)";
     const lines = text.split("\n").filter((l) => l.trim().length > 10);
-    const keywords = /\b(must|need|should|important|key|note|action|todo|decision|agree|consent|record|encrypt|secure|protect)\b/i;
+    // Find lines with action words or emphasis
+    const keywords =
+      /\b(must|need|should|important|key|note|action|todo|decision|agree|consent|record|encrypt|secure|protect)\b/i;
     const keyLines = lines.filter((l) => keywords.test(l));
     const result = keyLines.length > 0 ? keyLines : lines.slice(0, 5);
-
     return (
       "🔑 Key Points:\n" +
-      result.slice(0, 7).map((l) => `• ${l.trim()}`).join("\n")
+      result
+        .slice(0, 7)
+        .map((l) => `• ${l.trim()}`)
+        .join("\n")
     );
   }
 
   function extractActionItems(text) {
     if (!text.trim()) return "(no content)";
-    const actionWords = /\b(todo|action|follow.?up|remind|schedule|send|review|check|complete|assign|deadline)\b/i;
+    const actionWords =
+      /\b(todo|action|follow.?up|remind|schedule|send|review|check|complete|assign|deadline)\b/i;
     const lines = text.split("\n").filter((l) => actionWords.test(l) && l.trim().length > 5);
-
-    if (!lines.length) {
+    if (!lines.length)
       return '✅ No explicit action items found.\n\nTip: include words like "todo", "action", "follow up", or "deadline" to auto-detect action items.';
-    }
-
     return (
       "✅ Action Items:\n" +
-      lines.slice(0, 10).map((l) => `• ${l.trim()}`).join("\n")
+      lines
+        .slice(0, 10)
+        .map((l) => `• ${l.trim()}`)
+        .join("\n")
     );
   }
 
@@ -256,11 +287,9 @@ const NotesApp = (() => {
       .forEach((w) => {
         freq[w] = (freq[w] || 0) + 1;
       });
-
     const top = Object.entries(freq)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10);
-
     if (!top.length) return "(no significant words)";
     return "📊 Top Keywords:\n" + top.map(([w, c]) => `• ${w} (${c}x)`).join("\n");
   }
@@ -269,7 +298,6 @@ const NotesApp = (() => {
   function exportNote(format = "txt") {
     const note = notes.find((n) => n.id === activeNoteId);
     if (!note) return;
-
     let content, mime, ext;
     if (format === "json") {
       content = JSON.stringify({ ...note, exported: new Date().toISOString() }, null, 2);
@@ -284,7 +312,6 @@ const NotesApp = (() => {
       mime = "text/plain";
       ext = "txt";
     }
-
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -325,21 +352,66 @@ const NotesApp = (() => {
     // Wire up editor inputs
     const titleEl = document.getElementById("note-title");
     const bodyEl = document.getElementById("note-body");
-
-    if (titleEl) titleEl.addEventListener("input", updateActiveNote);
-    if (bodyEl) {
+    if (titleEl)
+      titleEl.addEventListener("input", () => {
+        updateActiveNote();
+      });
+    if (bodyEl)
       bodyEl.addEventListener("input", () => {
         updateActiveNote();
         updateWordCount(bodyEl.value);
       });
-    }
 
-    // Wire up toolbar buttons (omitted for brevity - same as before)
-    document.getElementById("btn-new-note")?.addEventListener("click", createNote);
-    document.getElementById("btn-delete-note")?.addEventListener("click", () => deleteNote(activeNoteId));
-    // ... other buttons remain the same
+    // Wire up toolbar buttons
+    document.getElementById("btn-new-note") &&
+      document.getElementById("btn-new-note").addEventListener("click", createNote);
+    document.getElementById("btn-delete-note") &&
+      document
+        .getElementById("btn-delete-note")
+        .addEventListener("click", () => deleteNote(activeNoteId));
+    document.getElementById("btn-export-txt") &&
+      document.getElementById("btn-export-txt").addEventListener("click", () => exportNote("txt"));
+    document.getElementById("btn-export-md") &&
+      document.getElementById("btn-export-md").addEventListener("click", () => exportNote("md"));
+    document.getElementById("btn-export-json") &&
+      document
+        .getElementById("btn-export-json")
+        .addEventListener("click", () => exportNote("json"));
+    document.getElementById("btn-export-all") &&
+      document.getElementById("btn-export-all").addEventListener("click", exportAllNotes);
 
-    // AI buttons (same as original)
+    // AI buttons
+    document.getElementById("btn-summarize") &&
+      document.getElementById("btn-summarize").addEventListener("click", () => {
+        const note = notes.find((n) => n.id === activeNoteId);
+        if (!note) return showToast("No note selected", "warning");
+        const out = document.getElementById("ai-output");
+        if (out) out.textContent = summarize(note.content);
+      });
+
+    document.getElementById("btn-keypoints") &&
+      document.getElementById("btn-keypoints").addEventListener("click", () => {
+        const note = notes.find((n) => n.id === activeNoteId);
+        if (!note) return showToast("No note selected", "warning");
+        const out = document.getElementById("ai-output");
+        if (out) out.textContent = extractKeyPoints(note.content);
+      });
+
+    document.getElementById("btn-actions") &&
+      document.getElementById("btn-actions").addEventListener("click", () => {
+        const note = notes.find((n) => n.id === activeNoteId);
+        if (!note) return showToast("No note selected", "warning");
+        const out = document.getElementById("ai-output");
+        if (out) out.textContent = extractActionItems(note.content);
+      });
+
+    document.getElementById("btn-keywords") &&
+      document.getElementById("btn-keywords").addEventListener("click", () => {
+        const note = notes.find((n) => n.id === activeNoteId);
+        if (!note) return showToast("No note selected", "warning");
+        const out = document.getElementById("ai-output");
+        if (out) out.textContent = wordFrequency(note.content);
+      });
   }
 
   return { init, createNote, deleteNote, exportNote, exportAllNotes, notes: () => notes };
