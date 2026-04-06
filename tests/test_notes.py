@@ -45,13 +45,9 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright, expect
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).parent.parent
 
-# MIME types for static asset serving.
 _MIME: dict[str, str] = {
     ".js": "application/javascript",
     ".css": "text/css",
@@ -59,34 +55,21 @@ _MIME: dict[str, str] = {
     ".svg": "image/svg+xml",
     ".ico": "image/x-icon",
 }
-
-# Map clean URL paths to HTML source files.
 _PAGES: dict[str, str] = {
     "/": "src/pages/index.html",
     "/video-chat": "src/pages/video-chat.html",
     "/notes": "src/pages/notes.html",
     "/consent": "src/pages/consent.html",
 }
-
-# Pre-enumerate every public static file at module-load time so that
-# user-supplied URL paths never flow into filesystem calls directly.
 _PUBLIC_FILES: dict[str, Path] = {
     "/" + f.relative_to(ROOT / "public").as_posix(): f
     for f in (ROOT / "public").rglob("*")
     if f.is_file()
 }
 
-# Generous timeout for all Playwright assertions (ms).
 TIMEOUT_MS = 30_000
-
-# Storage keys used by notes.js — keep in sync with the source.
 STORAGE_KEY = "safecloak_notes_v1"
 PASS_KEY = "safecloak_notes_pass"
-
-
-# ---------------------------------------------------------------------------
-# Minimal HTTP server (mirrors the setup in test_video_chat.py)
-# ---------------------------------------------------------------------------
 
 
 class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
@@ -98,7 +81,7 @@ class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
 class _AppHandler(http.server.BaseHTTPRequestHandler):
     """Serve HTML pages and public assets for the test suite."""
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):  
         path = self.path.split("?")[0]
 
         if path in _PAGES:
@@ -122,7 +105,7 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt, *args) -> None:  # suppress noisy output
+    def log_message(self, fmt, *args) -> None:  
         pass
 
 
@@ -130,11 +113,6 @@ def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -171,23 +149,16 @@ def page(browser_instance, base_url):
     ctx = browser_instance.new_context()
     pg = ctx.new_page()
 
-    # Collect console errors so we can assert on them.
     pg.errors = []
     pg.on("pageerror", lambda exc: pg.errors.append(str(exc)))
 
     pg.goto(f"{base_url}/notes", wait_until="domcontentloaded")
-    # Wait for NotesApp.init() to finish (it is async).
+
     pg.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
     yield pg
 
     ctx.close()
-
-
-# ---------------------------------------------------------------------------
-# Helper utilities
-# ---------------------------------------------------------------------------
-
 
 def _create_note(page, title: str = "Test Note", content: str = "Hello, world!") -> str:
     """
@@ -196,12 +167,12 @@ def _create_note(page, title: str = "Test Note", content: str = "Hello, world!")
     """
     page.click("#btn-new-note")
     page.wait_for_selector("#note-title", timeout=TIMEOUT_MS)
-    # Clear the default "Untitled Note" title and type the new one.
+ 
     page.fill("#note-title", title)
     page.fill("#note-body", content)
-    # Trigger the input event so updateActiveNote() runs.
+ 
     page.dispatch_event("#note-body", "input")
-    # Grab the active note ID from the highlighted list item.
+
     note_id = page.evaluate(
         "document.querySelector('.note-item.active') &&"
         " document.querySelector('.note-item.active').dataset.id"
@@ -220,12 +191,6 @@ def _reload_notes_page(page, base_url: str) -> None:
     page.goto(f"{base_url}/notes", wait_until="domcontentloaded")
     page.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
-
-# ---------------------------------------------------------------------------
-# 1. Smoke / initialisation
-# ---------------------------------------------------------------------------
-
-
 class TestSmoke:
     """The page loads and the core UI elements are present."""
 
@@ -240,13 +205,13 @@ class TestSmoke:
         page.wait_for_selector("#btn-new-note", timeout=TIMEOUT_MS)
 
     def test_empty_state_shown_when_no_notes(self, page):
-        # Fresh context → no notes in storage.
+
         container = page.locator("#notes-list")
         expect(container).to_contain_text("No notes yet", timeout=TIMEOUT_MS)
 
     def test_editor_hidden_when_no_active_note(self, page):
         editor = page.locator("#editor-wrapper")
-        # editor-wrapper should be display:none until a note is selected.
+      
         display = page.evaluate(
             "getComputedStyle(document.getElementById('editor-wrapper')).display"
         )
@@ -255,11 +220,6 @@ class TestSmoke:
     def test_ai_toolbar_buttons_present(self, page):
         for btn_id in ("btn-summarize", "btn-keypoints", "btn-actions", "btn-keywords"):
             page.wait_for_selector(f"#{btn_id}", timeout=TIMEOUT_MS)
-
-
-# ---------------------------------------------------------------------------
-# 2. Passphrase security
-# ---------------------------------------------------------------------------
 
 
 class TestPassphraseSecurity:
@@ -297,7 +257,7 @@ class TestPassphraseSecurity:
         _wait_for_save(page)
         raw = page.evaluate(f"localStorage.getItem('{STORAGE_KEY}')")
         assert raw is not None, "Encrypted notes should be written to localStorage"
-        # Should look like JSON (iv + ciphertext envelope).
+
         import json
         payload = json.loads(raw)
         assert "iv" in payload and "ciphertext" in payload, (
@@ -320,12 +280,6 @@ class TestPassphraseSecurity:
         assert passphrases[0] != passphrases[1], (
             "Each session must derive a fresh random passphrase"
         )
-
-
-# ---------------------------------------------------------------------------
-# 3. Note CRUD
-# ---------------------------------------------------------------------------
-
 
 class TestNoteCRUD:
     """Create, read, update, and delete notes through the UI."""
@@ -367,11 +321,9 @@ class TestNoteCRUD:
         _create_note(page, title="To Be Deleted")
         page.wait_for_selector(".note-item", timeout=TIMEOUT_MS)
 
-        # Handle the confirm() dialog automatically.
         page.once("dialog", lambda d: d.accept())
         page.click("#btn-delete-note")
 
-        # The list should revert to the empty state.
         expect(page.locator("#notes-list")).to_contain_text("No notes yet", timeout=TIMEOUT_MS)
 
     def test_delete_note_hides_editor(self, page):
@@ -393,18 +345,11 @@ class TestNoteCRUD:
         _create_note(page, title="Alpha Note", content="Alpha body")
         _create_note(page, title="Beta Note", content="Beta body")
 
-        # Click the first note in the list (most recently created = top).
         page.locator(".note-item").first.click()
         title_val = page.input_value("#note-title")
         body_val = page.input_value("#note-body")
         assert title_val in ("Alpha Note", "Beta Note"), "Editor should load the clicked note"
         assert body_val in ("Alpha body", "Beta body")
-
-
-# ---------------------------------------------------------------------------
-# 4. Persistence (encrypted round-trip)
-# ---------------------------------------------------------------------------
-
 
 class TestPersistence:
     """Notes survive a page reload via AES-GCM encryption."""
@@ -413,7 +358,6 @@ class TestPersistence:
         _create_note(page, title="Persistent Note", content="Remember me")
         _wait_for_save(page)
 
-        # Keep the same context (same sessionStorage → same passphrase) and reload.
         page.reload(wait_until="domcontentloaded")
         page.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
@@ -427,7 +371,6 @@ class TestPersistence:
         page.reload(wait_until="domcontentloaded")
         page.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
-        # Select the note and verify body.
         page.locator(".note-item").filter(has_text="Content Test").click()
         body = page.input_value("#note-body")
         assert body == "This is my persisted body"
@@ -450,7 +393,6 @@ class TestPersistence:
         silently fall back to an empty notes list rather than crash or expose
         garbled data.
         """
-        # --- Session A: save a note ---
         ctx_a = browser_instance.new_context()
         pg_a = ctx_a.new_page()
         pg_a.goto(f"{base_url}/notes", wait_until="domcontentloaded")
@@ -458,34 +400,26 @@ class TestPersistence:
         _create_note(pg_a, title="Secret from A", content="Top secret")
         _wait_for_save(pg_a)
 
-        # Grab the raw ciphertext so we can inject it into Session B.
         ciphertext = pg_a.evaluate(f"localStorage.getItem('{STORAGE_KEY}')")
         ctx_a.close()
 
-        # --- Session B: inject ciphertext, attempt to load ---
         ctx_b = browser_instance.new_context()
         pg_b = ctx_b.new_page()
-        # Pre-seed localStorage with the ciphertext from Session A.
+       
         pg_b.goto(f"{base_url}/notes", wait_until="domcontentloaded")
         pg_b.evaluate(f"localStorage.setItem('{STORAGE_KEY}', {repr(ciphertext)})")
-        # Reload so NotesApp reads the poisoned localStorage.
+  
         pg_b.reload(wait_until="domcontentloaded")
         pg_b.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
-        # Session B has a different passphrase → decryption fails → empty list.
         count = pg_b.locator(".note-item").count()
         assert count == 0, (
             "A new session with a different passphrase must not decrypt "
             "another session's notes — expected 0 notes, got " + str(count)
         )
-        # And crucially: no JS crash.
+
         assert pg_b.errors == [], f"Unexpected JS errors in Session B: {pg_b.errors}"
         ctx_b.close()
-
-
-# ---------------------------------------------------------------------------
-# 5. AI: summarise
-# ---------------------------------------------------------------------------
 
 
 class TestAISummarise:
@@ -510,7 +444,7 @@ class TestAISummarise:
     def test_summarise_returns_at_most_three_sentences(self, page):
         text = ". ".join([f"Sentence number {i}" for i in range(10)]) + "."
         result = self._run_summarise(page, text)
-        # The summary body is everything after the header line.
+     
         body = result.replace("📝 Summary:\n", "")
         sentence_count = len([s for s in body.split(".") if s.strip()])
         assert sentence_count <= 3, f"Expected ≤ 3 sentences in summary, got {sentence_count}"
@@ -528,12 +462,6 @@ class TestAISummarise:
     def test_summarise_single_sentence(self, page):
         result = self._run_summarise(page, "Only one sentence here.")
         assert "Only one sentence here" in result
-
-
-# ---------------------------------------------------------------------------
-# 6. AI: key points
-# ---------------------------------------------------------------------------
-
 
 class TestAIKeyPoints:
     """extractKeyPoints() surfaces lines containing action/importance keywords."""
@@ -562,7 +490,7 @@ class TestAIKeyPoints:
     def test_keypoints_falls_back_to_first_lines_when_no_keywords(self, page):
         content = "\n".join([f"Ordinary line {i} with no special words." for i in range(6)])
         result = self._run_keypoints(page, content)
-        # Should still return something (first 5 lines fallback).
+       
         assert "🔑 Key Points:" in result
         assert "Ordinary line" in result
 
@@ -580,11 +508,6 @@ class TestAIKeyPoints:
         )
         result = page.locator("#ai-output").text_content()
         assert "no content" in (result or "").lower()
-
-
-# ---------------------------------------------------------------------------
-# 7. AI: action items
-# ---------------------------------------------------------------------------
 
 
 class TestAIActionItems:
@@ -627,11 +550,6 @@ class TestAIActionItems:
         assert bullet_count <= 10, f"Action items should be capped at 10; got {bullet_count}"
 
 
-# ---------------------------------------------------------------------------
-# 8. AI: word frequency
-# ---------------------------------------------------------------------------
-
-
 class TestAIWordFrequency:
     """wordFrequency() returns the top-10 non-stopword keywords."""
 
@@ -656,15 +574,15 @@ class TestAIWordFrequency:
         assert "encryption" in lines[0], f"Most frequent word should be first; got: {lines[0]}"
 
     def test_stopwords_are_excluded(self, page):
-        # These are all stopwords defined in notes.js.
+
         content = "the the the and and and or or is is was was"
         result = self._run_freq(page, content)
-        # Either "no significant words" or the output has no stopword bullets.
+       
         for sw in ("the", "and", "or", "is", "was"):
             assert f"• {sw} " not in result, f"Stopword '{sw}' should not appear in freq output"
 
     def test_capped_at_ten_keywords(self, page):
-        # 15 distinct long words.
+   
         words = " ".join([f"uniqueword{i}word{i}" * 2 for i in range(15)])
         result = self._run_freq(page, words)
         bullet_count = result.count("•")
@@ -680,18 +598,12 @@ class TestAIWordFrequency:
         assert "no content" in (result or "").lower() or "no significant" in (result or "").lower()
 
     def test_minimum_word_length_three_chars(self, page):
-        # 1-2 char words should not appear.
+     
         content = "aa bb cc encryption encryption encryption"
         result = self._run_freq(page, content)
         assert "• aa" not in result
         assert "• bb" not in result
         assert "• cc" not in result
-
-
-# ---------------------------------------------------------------------------
-# 9. Export
-# ---------------------------------------------------------------------------
-
 
 class TestExport:
     """Export buttons trigger a file download with the correct MIME type."""
@@ -746,7 +658,7 @@ class TestExport:
             page.click("#btn-export-json")
         dl = dl_info.value
         content = dl.path().read_text()
-        data = json.loads(content)  # raises if invalid
+        data = json.loads(content)  
         assert "title" in data or "notes" in data, "JSON export should have expected structure"
 
     def test_export_all_notes_triggers_download(self, page):
@@ -767,11 +679,6 @@ class TestExport:
         titles = [n["title"] for n in data["notes"]]
         for t in ("Alpha", "Beta", "Gamma"):
             assert t in titles, f"Export-all missing note '{t}'"
-
-
-# ---------------------------------------------------------------------------
-# 10. Multi-note management
-# ---------------------------------------------------------------------------
 
 
 class TestMultiNoteManagement:
@@ -804,14 +711,13 @@ class TestMultiNoteManagement:
         _create_note(page, title="Note One", content="Body One")
         _create_note(page, title="Note Two", content="Body Two")
 
-        # Click Note One (second item in list, since Two is most recent).
         page.locator(".note-item").nth(1).click()
         active_title = page.input_value("#note-title")
         assert active_title == "Note One"
 
     def test_deleting_one_note_keeps_others(self, page):
         _create_note(page, title="Keep Me")
-        _create_note(page, title="Delete Me")  # active = most recent
+        _create_note(page, title="Delete Me") 
 
         page.once("dialog", lambda d: d.accept())
         page.click("#btn-delete-note")
@@ -819,11 +725,6 @@ class TestMultiNoteManagement:
         titles = page.locator(".note-item-title").all_text_contents()
         assert "Keep Me" in titles
         assert "Delete Me" not in titles
-
-
-# ---------------------------------------------------------------------------
-# 11. Word-count widget
-# ---------------------------------------------------------------------------
 
 
 class TestWordCountWidget:
@@ -859,12 +760,6 @@ class TestWordCountWidget:
         assert before != after, "Word count should change after adding words"
         assert "2 words" in after
 
-
-# ---------------------------------------------------------------------------
-# 12. Encryption isolation
-# ---------------------------------------------------------------------------
-
-
 class TestEncryptionIsolation:
     """Different sessions cannot read each other's encrypted notes."""
 
@@ -877,7 +772,6 @@ class TestEncryptionIsolation:
         pg.goto(f"{base_url}/notes", wait_until="domcontentloaded")
         pg.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
-        # Inject invalid ciphertext.
         pg.evaluate(
             f"localStorage.setItem('{STORAGE_KEY}', "
             "JSON.stringify({iv:'aaaa', ciphertext:'notvalidbase64!!!'}))"
@@ -897,27 +791,19 @@ class TestEncryptionIsolation:
         expect(page.locator("#notes-list")).to_contain_text("No notes yet", timeout=TIMEOUT_MS)
 
 
-# ---------------------------------------------------------------------------
-# 13. Concurrent / rapid-edit debounce
-# ---------------------------------------------------------------------------
-
-
 class TestDebounce:
     """Rapid typing should not result in data loss or corruption."""
 
     def test_rapid_typing_saves_final_content(self, page, base_url):
         _create_note(page, title="Debounce Test", content="")
 
-        # Simulate rapid keystrokes.
         body = page.locator("#note-body")
         final_text = "rapid typing test final value"
         body.fill(final_text)
         page.dispatch_event("#note-body", "input")
 
-        # Wait longer than the 800 ms debounce.
         _wait_for_save(page)
 
-        # Reload — same context so same passphrase.
         page.reload(wait_until="domcontentloaded")
         page.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
@@ -926,22 +812,14 @@ class TestDebounce:
         assert saved_body == final_text, (
             f"Expected '{final_text}' after reload; got '{saved_body}'"
         )
-
-
-# ---------------------------------------------------------------------------
-# 14. Empty-state handling
-# ---------------------------------------------------------------------------
-
-
-class TestEmptyState:
+        class TestEmptyState:
     """Graceful behaviour when there are no notes."""
-
     def test_ai_buttons_do_nothing_when_no_note_selected(self, page):
         """Clicking AI buttons without an active note should show a warning toast."""
-        # No note created → no active note.
+
         for btn_id in ("#btn-summarize", "#btn-keypoints", "#btn-actions", "#btn-keywords"):
             page.click(btn_id)
-            # ai-output should remain empty (toast appears, not output).
+   
             output = page.locator("#ai-output").text_content() or ""
             assert output == "", (
                 f"{btn_id} should not populate ai-output when no note is selected"
