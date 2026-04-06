@@ -5,6 +5,10 @@
 
 const NotesApp = (() => {
   const STORAGE_KEY = "safecloak_notes_v1";
+  // SECURITY: The passphrase must NEVER be stored in the same storage
+  // as the ciphertext (localStorage). Using sessionStorage means the key
+  // lives only for the current browser tab/session and is wiped on close,
+  // so an attacker who reads localStorage cannot also read the key.
   const PASS_KEY = "safecloak_notes_pass";
   const PREVIEW_LENGTH = 60;
   const STOPWORDS = new Set([
@@ -66,11 +70,14 @@ const NotesApp = (() => {
   /* ── Persistence ── */
   function getPassphrase() {
     if (passphrase) return passphrase;
-    // Derive a device-session passphrase from a stored random key
-    let stored = localStorage.getItem(PASS_KEY);
+    // SECURITY FIX: Use sessionStorage (not localStorage) so the encryption
+    // key is never co-located with the ciphertext in localStorage.
+    // sessionStorage is scoped to the tab and cleared on close, so an attacker
+    // who reads localStorage cannot also retrieve the decryption key.
+    let stored = sessionStorage.getItem(PASS_KEY);
     if (!stored) {
       stored = Crypto.randomId(24);
-      localStorage.setItem(PASS_KEY, stored);
+      sessionStorage.setItem(PASS_KEY, stored);
     }
     passphrase = stored;
     return passphrase;
