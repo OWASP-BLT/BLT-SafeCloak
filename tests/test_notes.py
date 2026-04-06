@@ -769,6 +769,8 @@ class TestEncryptionIsolation:
         """Tampered ciphertext must never crash the app — fall back to empty list."""
         ctx = browser_instance.new_context()
         pg = ctx.new_page()
+        pg.errors = []
+        pg.on("pageerror", lambda exc: pg.errors.append(str(exc)))
         pg.goto(f"{base_url}/notes", wait_until="domcontentloaded")
         pg.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
