@@ -812,8 +812,11 @@ class TestDebounce:
         assert saved_body == final_text, (
             f"Expected '{final_text}' after reload; got '{saved_body}'"
         )
-        class TestEmptyState:
+
+class TestEmptyState:
     """Graceful behaviour when there are no notes."""
+
+    def test_ai_buttons_do_nothing_when_no_note_selected(self, page):
     def test_ai_buttons_do_nothing_when_no_note_selected(self, page):
         """Clicking AI buttons without an active note should show a warning toast."""
 
