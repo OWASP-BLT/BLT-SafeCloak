@@ -51,9 +51,9 @@ self.addEventListener("install", (event) => {
       const shell = await loadRouteManifest();
       const cache = await caches.open(CACHE_NAME);
       await cache.addAll(shell);
+      self.skipWaiting();
     })()
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
