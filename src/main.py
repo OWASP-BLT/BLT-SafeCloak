@@ -47,7 +47,7 @@ def _manifest_payload(origin: str) -> dict:
         'icons': [
             {
                 'src': f'{origin}/img/logo.png',
-                'sizes': '192x192',
+                'sizes': '221x210',
                 'type': 'image/png',
                 'purpose': 'any maskable',
             },

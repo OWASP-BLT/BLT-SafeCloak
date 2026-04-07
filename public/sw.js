@@ -96,7 +96,14 @@ self.addEventListener("fetch", (event) => {
           if (cachedRoute) {
             return cachedRoute;
           }
-          return caches.match("/");
+          const homePage = await caches.match("/");
+          if (homePage) {
+            return homePage;
+          }
+          return new Response("Offline and page unavailable", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
         }
       })()
     );
