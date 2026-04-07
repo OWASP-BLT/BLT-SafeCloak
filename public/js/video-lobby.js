@@ -12,6 +12,7 @@
   let micEnabled = true;
   let camEnabled = true;
   let voiceUiBound = false;
+  let permissionPending = false;
 
   const $ = (id) => document.getElementById(id);
 
@@ -442,7 +443,13 @@
 
     if (placeholder) {
       placeholder.style.display = videoAvailable ? "none" : "flex";
-      placeholder.textContent = "Camera preview unavailable";
+      const textEl = $("prejoin-placeholder-text");
+      if (textEl) textEl.textContent = "Camera preview unavailable";
+    }
+
+    const allowBtn = $("btn-allow-media");
+    if (allowBtn) {
+      allowBtn.style.display = permissionPending ? "inline-flex" : "none";
     }
 
     if (status) {
@@ -503,6 +510,7 @@
     for (const mediaConstraints of constraints) {
       try {
         previewStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+        permissionPending = false;
         micEnabled = hasAudioTrack();
         camEnabled = hasVideoTrack();
         updatePreviewUI();
@@ -515,6 +523,7 @@
 
     micEnabled = false;
     camEnabled = false;
+    permissionPending = true;
     updatePreviewUI();
     resetPreviewVoiceUi();
     showToast("Could not access camera/microphone preview", "warning");
@@ -625,6 +634,13 @@
 
     if (micBtn) micBtn.addEventListener("click", toggleMicPreview);
     if (camBtn) camBtn.addEventListener("click", toggleCamPreview);
+
+    const allowMediaBtn = $("btn-allow-media");
+    if (allowMediaBtn) {
+      allowMediaBtn.addEventListener("click", () => {
+        initPreviewStream();
+      });
+    }
 
     await initPreviewStream();
   });
