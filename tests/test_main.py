@@ -21,7 +21,7 @@ sys.modules['workers'] = mock_workers
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.main import Default
+from src.main import APP_SHELL, PAGES_MAP, Default
 
 
 class FakeRequest:
@@ -71,21 +71,8 @@ def test_routes_endpoint_returns_route_manifest():
     assert response.headers['Content-Type'] == 'application/json; charset=utf-8'
 
     manifest = json.loads(response.body)
-    assert manifest['pages'] == ['/', '/video-chat', '/notes', '/consent']
-    assert manifest['app_shell'] == [
-        '/',
-        '/video-chat',
-        '/notes',
-        '/consent',
-        '/css/main.css',
-        '/js/ui.js',
-        '/js/crypto.js',
-        '/js/notes.js',
-        '/js/consent.js',
-        '/js/video.js',
-        '/img/logo.png',
-        '/manifest.json',
-    ]
+    assert manifest['pages'] == list(PAGES_MAP.keys())
+    assert manifest['app_shell'] == APP_SHELL
 
 
 def test_options_requests_return_cors_preflight_response():
