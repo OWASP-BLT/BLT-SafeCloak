@@ -17,6 +17,18 @@ PAGES_MAP = {
     '/consent': 'consent.html',
 }
 
+APP_SHELL = [
+    *PAGES_MAP.keys(),
+    '/css/main.css',
+    '/js/ui.js',
+    '/js/crypto.js',
+    '/js/notes.js',
+    '/js/consent.js',
+    '/js/video.js',
+    '/img/logo.png',
+    '/manifest.json',
+]
+
 
 def _origin(url) -> str:
     return f'{url.scheme}://{url.netloc}'
@@ -43,6 +55,13 @@ def _manifest_payload(origin: str) -> dict:
     }
 
 
+def _route_manifest_payload() -> dict:
+    return {
+        'pages': list(PAGES_MAP.keys()),
+        'app_shell': APP_SHELL,
+    }
+
+
 class Default(WorkerEntrypoint):
     """Worker entrypoint for handling HTTP requests and serving content."""
 
@@ -63,6 +82,13 @@ class Default(WorkerEntrypoint):
                     json.dumps(_manifest_payload(origin)),
                     status=200,
                     headers=base_headers('application/manifest+json; charset=utf-8'),
+                )
+
+            if path == '/routes.json':
+                return Response(
+                    json.dumps(_route_manifest_payload()),
+                    status=200,
+                    headers=base_headers('application/json; charset=utf-8'),
                 )
 
         # Handle GET requests for HTML pages

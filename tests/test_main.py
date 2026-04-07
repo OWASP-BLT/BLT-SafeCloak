@@ -64,6 +64,30 @@ def test_manifest_endpoint_returns_web_manifest():
     assert manifest['icons'][0]['src'] == 'https://example.com/img/logo.png'
 
 
+def test_routes_endpoint_returns_route_manifest():
+    response = _fetch('/routes.json')
+
+    assert response.status_code == 200
+    assert response.headers['Content-Type'] == 'application/json; charset=utf-8'
+
+    manifest = json.loads(response.body)
+    assert manifest['pages'] == ['/', '/video-chat', '/notes', '/consent']
+    assert manifest['app_shell'] == [
+        '/',
+        '/video-chat',
+        '/notes',
+        '/consent',
+        '/css/main.css',
+        '/js/ui.js',
+        '/js/crypto.js',
+        '/js/notes.js',
+        '/js/consent.js',
+        '/js/video.js',
+        '/img/logo.png',
+        '/manifest.json',
+    ]
+
+
 def test_options_requests_return_cors_preflight_response():
     response = _fetch('/manifest.json', method='OPTIONS')
 
