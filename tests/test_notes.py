@@ -81,7 +81,7 @@ class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
 class _AppHandler(http.server.BaseHTTPRequestHandler):
     """Serve HTML pages and public assets for the test suite."""
 
-    def do_GET(self):  
+    def do_GET(self):
         path = self.path.split("?")[0]
 
         if path in _PAGES:
@@ -105,7 +105,7 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt, *args) -> None:  
+    def log_message(self, fmt, *args) -> None:
         pass
 
 
@@ -160,6 +160,7 @@ def page(browser_instance, base_url):
 
     ctx.close()
 
+
 def _create_note(page, title: str = "Test Note", content: str = "Hello, world!") -> str:
     """
     Click '+ New', fill in title + body, and return the generated note ID.
@@ -167,10 +168,10 @@ def _create_note(page, title: str = "Test Note", content: str = "Hello, world!")
     """
     page.click("#btn-new-note")
     page.wait_for_selector("#note-title", timeout=TIMEOUT_MS)
- 
+
     page.fill("#note-title", title)
     page.fill("#note-body", content)
- 
+
     page.dispatch_event("#note-body", "input")
 
     note_id = page.evaluate(
@@ -190,6 +191,7 @@ def _reload_notes_page(page, base_url: str) -> None:
     page.goto(f"{base_url}/", wait_until="domcontentloaded")
     page.goto(f"{base_url}/notes", wait_until="domcontentloaded")
     page.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
+
 
 class TestSmoke:
     """The page loads and the core UI elements are present."""
@@ -211,7 +213,7 @@ class TestSmoke:
 
     def test_editor_hidden_when_no_active_note(self, page):
         editor = page.locator("#editor-wrapper")
-      
+
         display = page.evaluate(
             "getComputedStyle(document.getElementById('editor-wrapper')).display"
         )
@@ -280,6 +282,7 @@ class TestPassphraseSecurity:
         assert passphrases[0] != passphrases[1], (
             "Each session must derive a fresh random passphrase"
         )
+
 
 class TestNoteCRUD:
     """Create, read, update, and delete notes through the UI."""
@@ -351,6 +354,7 @@ class TestNoteCRUD:
         assert title_val in ("Alpha Note", "Beta Note"), "Editor should load the clicked note"
         assert body_val in ("Alpha body", "Beta body")
 
+
 class TestPersistence:
     """Notes survive a page reload via AES-GCM encryption."""
 
@@ -405,10 +409,10 @@ class TestPersistence:
 
         ctx_b = browser_instance.new_context()
         pg_b = ctx_b.new_page()
-       
+
         pg_b.goto(f"{base_url}/notes", wait_until="domcontentloaded")
         pg_b.evaluate(f"localStorage.setItem('{STORAGE_KEY}', {repr(ciphertext)})")
-  
+
         pg_b.reload(wait_until="domcontentloaded")
         pg_b.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
 
@@ -444,7 +448,7 @@ class TestAISummarise:
     def test_summarise_returns_at_most_three_sentences(self, page):
         text = ". ".join([f"Sentence number {i}" for i in range(10)]) + "."
         result = self._run_summarise(page, text)
-     
+
         body = result.replace("📝 Summary:\n", "")
         sentence_count = len([s for s in body.split(".") if s.strip()])
         assert sentence_count <= 3, f"Expected ≤ 3 sentences in summary, got {sentence_count}"
@@ -462,6 +466,7 @@ class TestAISummarise:
     def test_summarise_single_sentence(self, page):
         result = self._run_summarise(page, "Only one sentence here.")
         assert "Only one sentence here" in result
+
 
 class TestAIKeyPoints:
     """extractKeyPoints() surfaces lines containing action/importance keywords."""
@@ -490,7 +495,7 @@ class TestAIKeyPoints:
     def test_keypoints_falls_back_to_first_lines_when_no_keywords(self, page):
         content = "\n".join([f"Ordinary line {i} with no special words." for i in range(6)])
         result = self._run_keypoints(page, content)
-       
+
         assert "🔑 Key Points:" in result
         assert "Ordinary line" in result
 
@@ -569,7 +574,7 @@ class TestAIWordFrequency:
     def test_most_frequent_word_appears_first(self, page):
         content = " ".join(["encryption"] * 10 + ["privacy"] * 3 + ["security"] * 1)
         result = self._run_freq(page, content)
-        lines = [l.strip() for l in result.split("\n") if l.strip().startswith("•")]
+        lines = [line.strip() for line in result.split("\n") if line.strip().startswith("•")]
         assert lines, "Should have at least one bullet point"
         assert "encryption" in lines[0], f"Most frequent word should be first; got: {lines[0]}"
 
@@ -577,12 +582,12 @@ class TestAIWordFrequency:
 
         content = "the the the and and and or or is is was was"
         result = self._run_freq(page, content)
-       
+
         for sw in ("the", "and", "or", "is", "was"):
             assert f"• {sw} " not in result, f"Stopword '{sw}' should not appear in freq output"
 
     def test_capped_at_ten_keywords(self, page):
-   
+
         words = " ".join([f"uniqueword{i}word{i}" * 2 for i in range(15)])
         result = self._run_freq(page, words)
         bullet_count = result.count("•")
@@ -598,12 +603,13 @@ class TestAIWordFrequency:
         assert "no content" in (result or "").lower() or "no significant" in (result or "").lower()
 
     def test_minimum_word_length_three_chars(self, page):
-     
+
         content = "aa bb cc encryption encryption encryption"
         result = self._run_freq(page, content)
         assert "• aa" not in result
         assert "• bb" not in result
         assert "• cc" not in result
+
 
 class TestExport:
     """Export buttons trigger a file download with the correct MIME type."""
@@ -658,7 +664,7 @@ class TestExport:
             page.click("#btn-export-json")
         dl = dl_info.value
         content = dl.path().read_text()
-        data = json.loads(content)  
+        data = json.loads(content)
         assert "title" in data or "notes" in data, "JSON export should have expected structure"
 
     def test_export_all_notes_triggers_download(self, page):
@@ -717,7 +723,7 @@ class TestMultiNoteManagement:
 
     def test_deleting_one_note_keeps_others(self, page):
         _create_note(page, title="Keep Me")
-        _create_note(page, title="Delete Me") 
+        _create_note(page, title="Delete Me")
 
         page.once("dialog", lambda d: d.accept())
         page.click("#btn-delete-note")
@@ -759,6 +765,7 @@ class TestWordCountWidget:
 
         assert before != after, "Word count should change after adding words"
         assert "2 words" in after
+
 
 class TestEncryptionIsolation:
     """Different sessions cannot read each other's encrypted notes."""
@@ -815,16 +822,16 @@ class TestDebounce:
             f"Expected '{final_text}' after reload; got '{saved_body}'"
         )
 
+
 class TestEmptyState:
     """Graceful behaviour when there are no notes."""
 
     def test_ai_buttons_do_nothing_when_no_note_selected(self, page):
-    def test_ai_buttons_do_nothing_when_no_note_selected(self, page):
-        """Clicking AI buttons without an active note should show a warning toast."""
+        """Clicking AI buttons without an active note must not populate #ai-output."""
 
         for btn_id in ("#btn-summarize", "#btn-keypoints", "#btn-actions", "#btn-keywords"):
             page.click(btn_id)
-   
+
             output = page.locator("#ai-output").text_content() or ""
             assert output == "", (
                 f"{btn_id} should not populate ai-output when no note is selected"
