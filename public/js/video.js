@@ -14,10 +14,12 @@ const VideoChat = (() => {
   let voiceAnimFrame = null;
   let micMuted = false;
   let camOff = false;
+  let mirrorEnabled = true;
   let consentGiven = false;
   let screenSharing = false;
   let initialMediaPreferences = { mic: true, cam: true };
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
+  const MIRROR_PREFS_STORAGE_KEY = "blt-safecloak-mirror-preview-enabled";
 
   const state = {
     peerId: null,
@@ -39,6 +41,24 @@ const VideoChat = (() => {
   function setDotStatus(status) {
     const dot = $("status-dot");
     if (dot) dot.className = `status-dot ${status}`;
+  }
+
+  function getStoredMirrorPreference() {
+    try {
+      const raw = window.sessionStorage.getItem(MIRROR_PREFS_STORAGE_KEY);
+      if (raw === null) return true;
+      return raw === "true";
+    } catch {
+      return true;
+    }
+  }
+
+  function persistMirrorPreference() {
+    try {
+      window.sessionStorage.setItem(MIRROR_PREFS_STORAGE_KEY, String(mirrorEnabled));
+    } catch {
+      /* ignore storage failures */
+    }
   }
 
   /* ── Browser detection ── */
@@ -103,12 +123,44 @@ const VideoChat = (() => {
   }
 
   /* ── Media ── */
+  function applyLocalPreviewMirror() {
+    const localVideo = $("local-video");
+    if (!localVideo) return;
+    const shouldMirror = mirrorEnabled && !screenSharing;
+    if (window.VideoPreview && typeof window.VideoPreview.setMirror === "function") {
+      window.VideoPreview.setMirror(localVideo, shouldMirror);
+      return;
+    }
+    localVideo.classList.toggle("video-local-mirrored", shouldMirror);
+  }
+
+  function syncMirrorButton() {
+    const mirrorBtn = $("btn-mirror");
+    if (!mirrorBtn) return;
+    mirrorBtn.title = mirrorEnabled ? "Disable mirror preview" : "Enable mirror preview";
+    mirrorBtn.setAttribute("aria-pressed", mirrorEnabled ? "true" : "false");
+    mirrorBtn.classList.toggle("active", mirrorEnabled);
+  }
+
   async function attachStream(stream) {
     const localVideo = $("local-video");
     if (localVideo) {
-      localVideo.srcObject = stream;
-      localVideo.muted = true;
+      if (window.VideoPreview && typeof window.VideoPreview.render === "function") {
+        window.VideoPreview.render({
+          videoEl: localVideo,
+          stream,
+          visible: true,
+          muted: true,
+          isLocal: true,
+          mirror: mirrorEnabled && !screenSharing,
+        });
+      } else {
+        localVideo.srcObject = stream;
+        localVideo.muted = true;
+      }
     }
+    applyLocalPreviewMirror();
+    syncMirrorButton();
 
     /* Build a separate stream for WebRTC: original video + voice-changed audio */
     if (typeof VoiceChanger !== "undefined") {
@@ -165,6 +217,8 @@ const VideoChat = (() => {
       camBtn.setAttribute("aria-pressed", camOff ? "true" : "false");
       camBtn.classList.toggle("active", camOff);
     }
+
+    syncMirrorButton();
   }
 
   function applyInitialMediaPreferences() {
@@ -623,6 +677,14 @@ const VideoChat = (() => {
     localStream.getVideoTracks().forEach((track) => (track.enabled = !camOff));
     syncControlButtons();
     showToast(camOff ? "Camera disabled" : "Camera enabled", "info");
+  }
+
+  function toggleMirrorPreview() {
+    mirrorEnabled = !mirrorEnabled;
+    persistMirrorPreference();
+    applyLocalPreviewMirror();
+    syncMirrorButton();
+    showToast(mirrorEnabled ? "Mirror preview enabled" : "Mirror preview disabled", "info");
   }
 
   function disconnectPeer(peerId) {
@@ -1087,9 +1149,16 @@ const VideoChat = (() => {
         }
       }
       const localVideo = $("local-video");
-      if (localVideo) localVideo.srcObject = screenStream;
+      if (localVideo) {
+        if (window.VideoPreview && typeof window.VideoPreview.setStream === "function") {
+          window.VideoPreview.setStream(localVideo, screenStream);
+        } else {
+          localVideo.srcObject = screenStream;
+        }
+      }
       showToast("Screen sharing started", "success");
       screenSharing = true;
+      applyLocalPreviewMirror();
       $("btn-screen") && $("btn-screen").classList.add("active");
       screenTrack.onended = () => {
         if (screenSharing) stopScreenShare();
@@ -1111,10 +1180,15 @@ const VideoChat = (() => {
     }
     const localVideo = $("local-video");
     if (localVideo) {
-      localVideo.srcObject = localStream;
+      if (window.VideoPreview && typeof window.VideoPreview.setStream === "function") {
+        window.VideoPreview.setStream(localVideo, localStream);
+      } else {
+        localVideo.srcObject = localStream;
+      }
     }
     $("btn-screen") && $("btn-screen").classList.remove("active");
     screenSharing = false;
+    applyLocalPreviewMirror();
     showToast("Screen sharing stopped", "info");
   }
 
@@ -1142,6 +1216,8 @@ const VideoChat = (() => {
 
   /* ── Init ── */
   async function init() {
+    mirrorEnabled = getStoredMirrorPreference();
+    syncMirrorButton();
     readInitialMediaPreferencesFromUrl();
     const ok = await startLocalMedia();
     if (ok) {
@@ -1157,6 +1233,7 @@ const VideoChat = (() => {
     disconnectPeer,
     toggleMic,
     toggleCamera,
+    toggleMirrorPreview,
     endCall,
     hangup,
     toggleNoiseSuppression,
