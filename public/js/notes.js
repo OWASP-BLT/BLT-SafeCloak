@@ -66,11 +66,13 @@ const NotesApp = (() => {
   /* ── Persistence ── */
   function getPassphrase() {
     if (passphrase) return passphrase;
-    // Derive a device-session passphrase from a stored random key
-    let stored = localStorage.getItem(PASS_KEY);
+    // Passphrase lives in sessionStorage so it is never co-located with the
+    // ciphertext in localStorage.  A new tab / session always gets a fresh key,
+    // which is the intended security invariant.
+    let stored = sessionStorage.getItem(PASS_KEY);
     if (!stored) {
       stored = Crypto.randomId(24);
-      localStorage.setItem(PASS_KEY, stored);
+      sessionStorage.setItem(PASS_KEY, stored);
     }
     passphrase = stored;
     return passphrase;
