@@ -175,9 +175,19 @@ def _create_note(page, title: str = "Test Note", content: str = "Hello, world!")
     return note_id or ""
 
 
-def _wait_for_save(page) -> None:
-    """Wait longer than the 800 ms debounce so saveNotes() has run."""
-    time.sleep(1.0)
+def _wait_for_save(page, timeout: float = 5.0) -> None:
+    """Poll localStorage until saveNotes() has written the encrypted blob.
+
+    The notes.js debounce delay is 800 ms, so we poll with a short interval
+    and give up after *timeout* seconds to avoid hanging the suite.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        saved = page.evaluate(f"localStorage.getItem('{STORAGE_KEY}')")
+        if saved is not None:
+            return
+        time.sleep(0.1)
+    # Fall through — test will fail on its own assertion if nothing was saved
 
 
 def _reload_notes_page(page, base_url: str) -> None:
