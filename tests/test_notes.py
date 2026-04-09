@@ -12,20 +12,20 @@ APIs, and the real DOM — exactly as a user's browser would.
 
 Test groups
 -----------
-1.  Smoke / initialisation  – page loads, DOM wired up, no JS errors
-2.  Passphrase security     – key is in sessionStorage, NOT localStorage
-3.  Note CRUD               – create / read / update / delete
-4.  Persistence             – notes survive a reload (encrypted round-trip)
-5.  AI: summarise           – output format and edge cases
-6.  AI: key points          – keyword extraction
-7.  AI: action items        – action-word detection
-8.  AI: word frequency      – top-keyword ranking, stopword filtering
-9.  Export                  – txt / md / json download triggers
-10. Multi-note management   – ordering, active selection, preview truncation
-11. Word-count widget       – live character / word counter
-12. Encryption isolation    – different sessions cannot read each other's data
-13. Concurrent edits        – rapid typing debounce does not corrupt data
-14. Empty-state handling    – graceful behaviour with no notes present
+1.  Smoke / initialisation  - page loads, DOM wired up, no JS errors
+2.  Passphrase security     - key is in sessionStorage, NOT localStorage
+3.  Note CRUD               - create / read / update / delete
+4.  Persistence             - notes survive a reload (encrypted round-trip)
+5.  AI: summarise           - output format and edge cases
+6.  AI: key points          - keyword extraction
+7.  AI: action items        - action-word detection
+8.  AI: word frequency      - top-keyword ranking, stopword filtering
+9.  Export                  - txt / md / json download triggers
+10. Multi-note management   - ordering, active selection, preview truncation
+11. Word-count widget       - live character / word counter
+12. Encryption isolation    - different sessions cannot read each other's data
+13. Concurrent edits        - rapid typing debounce does not corrupt data
+14. Empty-state handling    - graceful behaviour with no notes present
 
 Local setup
 -----------
@@ -36,7 +36,7 @@ Local setup
 """
 
 import http.server
-import socket
+import json
 import socketserver
 import threading
 import time
@@ -107,12 +107,6 @@ class _AppHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args) -> None:
         pass
-
-
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 @pytest.fixture(scope="module")
@@ -260,7 +254,6 @@ class TestPassphraseSecurity:
         raw = page.evaluate(f"localStorage.getItem('{STORAGE_KEY}')")
         assert raw is not None, "Encrypted notes should be written to localStorage"
 
-        import json
         payload = json.loads(raw)
         assert "iv" in payload and "ciphertext" in payload, (
             "Stored payload should have 'iv' and 'ciphertext' fields"
@@ -409,9 +402,11 @@ class TestPersistence:
 
         ctx_b = browser_instance.new_context()
         pg_b = ctx_b.new_page()
+        pg_b.errors = []
+        pg_b.on("pageerror", lambda exc: pg_b.errors.append(str(exc)))
 
         pg_b.goto(f"{base_url}/notes", wait_until="domcontentloaded")
-        pg_b.evaluate(f"localStorage.setItem('{STORAGE_KEY}', {repr(ciphertext)})")
+        pg_b.evaluate(f"localStorage.setItem('{STORAGE_KEY}', {ciphertext!r})")
 
         pg_b.reload(wait_until="domcontentloaded")
         pg_b.wait_for_function("typeof NotesApp !== 'undefined'", timeout=TIMEOUT_MS)
@@ -658,7 +653,6 @@ class TestExport:
         assert "Exported body line" in content
 
     def test_export_json_is_valid_json(self, page):
-        import json
         _create_note(page, title="JSON Valid", content="Check structure")
         with page.expect_download(timeout=TIMEOUT_MS) as dl_info:
             page.click("#btn-export-json")
@@ -674,7 +668,6 @@ class TestExport:
         assert dl.suggested_filename.endswith(".json")
 
     def test_export_all_contains_all_notes(self, page):
-        import json
         for t in ("Alpha", "Beta", "Gamma"):
             _create_note(page, title=t)
         with page.expect_download(timeout=TIMEOUT_MS) as dl_info:
