@@ -136,6 +136,10 @@ body {
   object-fit: cover;
 }
 
+.video-local-mirrored {
+  transform: scaleX(-1);
+}
+
 .video-label {
   position: absolute;
   left: 0.65rem;

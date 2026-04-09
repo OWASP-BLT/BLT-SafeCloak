@@ -8,11 +8,13 @@
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const MEDIA_PREFS_STORAGE_KEY = "blt-safecloak-media-preferences";
+  const MIRROR_PREFS_STORAGE_KEY = "blt-safecloak-mirror-preview-enabled";
   const LOBBY_EFFECT_ORDER = ["deep", "chipmunk", "robot", "echo", "voice1", "voice2", "voice3"];
 
   let previewStream = null;
-  let micEnabled = false;
-  let camEnabled = false;
+  let micEnabled = true;
+  let camEnabled = true;
+  let mirrorEnabled = true;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -86,6 +88,34 @@
 
   function hasVideoTrack() {
     return Boolean(previewStream && previewStream.getVideoTracks().length > 0);
+  }
+
+  function getStoredMirrorPreference() {
+    try {
+      const raw = window.sessionStorage.getItem(MIRROR_PREFS_STORAGE_KEY);
+      if (raw === null) return true;
+      return raw === "true";
+    } catch {
+      return true;
+    }
+  }
+
+  function persistMirrorPreference() {
+    try {
+      window.sessionStorage.setItem(MIRROR_PREFS_STORAGE_KEY, String(mirrorEnabled));
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function applyPreviewMirror() {
+    const videoEl = $("prejoin-video");
+    if (!videoEl) return;
+    if (window.VideoPreview && typeof window.VideoPreview.setMirror === "function") {
+      window.VideoPreview.setMirror(videoEl, mirrorEnabled);
+      return;
+    }
+    videoEl.classList.toggle("video-local-mirrored", mirrorEnabled);
   }
 
   function _syncSliderFill(el) {
@@ -477,6 +507,28 @@
     resetPreviewVoiceUi();
   }
 
+  function syncMirrorPreviewButton(videoAvailable) {
+    const mirrorBtn = $("btn-preview-mirror");
+    if (!mirrorBtn) return;
+    mirrorBtn.title = mirrorEnabled ? "Disable mirror preview" : "Enable mirror preview";
+    mirrorBtn.setAttribute("aria-pressed", String(mirrorEnabled));
+    mirrorBtn.classList.toggle("active", mirrorEnabled);
+    mirrorBtn.disabled = !videoAvailable;
+    mirrorBtn.classList.toggle("opacity-50", !videoAvailable);
+    mirrorBtn.classList.toggle("cursor-not-allowed", !videoAvailable);
+  }
+
+  function toggleMirrorPreview() {
+    if (!hasVideoTrack()) {
+      showToast("No camera available", "warning");
+      return;
+    }
+    mirrorEnabled = !mirrorEnabled;
+    persistMirrorPreference();
+    applyPreviewMirror();
+    syncMirrorPreviewButton(true);
+  }
+
   function updatePreviewUI() {
     const status = $("prejoin-status");
     const videoEl = $("prejoin-video");
@@ -489,11 +541,34 @@
 
     if (videoEl) {
       if (videoAvailable) {
-        videoEl.style.display = "block";
-        videoEl.srcObject = previewStream;
+        if (window.VideoPreview && typeof window.VideoPreview.render === "function") {
+          window.VideoPreview.render({
+            videoEl,
+            stream: previewStream,
+            visible: true,
+            muted: true,
+            isLocal: true,
+            mirror: mirrorEnabled,
+          });
+        } else {
+          videoEl.style.display = "block";
+          videoEl.srcObject = previewStream;
+        }
+        applyPreviewMirror();
       } else {
-        videoEl.style.display = "none";
-        videoEl.srcObject = null;
+        if (window.VideoPreview && typeof window.VideoPreview.render === "function") {
+          window.VideoPreview.render({
+            videoEl,
+            stream: null,
+            visible: false,
+            muted: true,
+            isLocal: true,
+            mirror: mirrorEnabled,
+          });
+        } else {
+          videoEl.style.display = "none";
+          videoEl.srcObject = null;
+        }
       }
     }
 
@@ -538,6 +613,7 @@
       camBtn.classList.toggle("cursor-not-allowed", !videoAvailable);
     }
 
+    syncMirrorPreviewButton(videoAvailable);
     _syncPreviewVoiceAvailability();
   }
 
@@ -677,7 +753,13 @@
     const displayNameInput = getDisplayNameInput();
     const micBtn = $("btn-preview-mic");
     const camBtn = $("btn-preview-cam");
+<<<<<<< HEAD
     let shouldAutoJoinFromInvite = false;
+=======
+    const mirrorBtn = $("btn-preview-mirror");
+
+    mirrorEnabled = getStoredMirrorPreference();
+>>>>>>> 5b03e4d (mirror effect)
 
     bindPreviewVoiceControls();
     restoreDisplayNameFromStorage();
@@ -730,6 +812,7 @@
 
     if (micBtn) micBtn.addEventListener("click", toggleMicPreview);
     if (camBtn) camBtn.addEventListener("click", toggleCamPreview);
+    if (mirrorBtn) mirrorBtn.addEventListener("click", toggleMirrorPreview);
 
     await initPreviewStream();
 
