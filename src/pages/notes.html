@@ -225,58 +225,59 @@
               </button>
             </div>
 
+            <!-- Always-visible toolbar: delete + export + word count -->
+            <div
+              class="editor-toolbar border-b border-gray-100 px-4 py-3 bg-gray-50"
+              role="toolbar"
+              aria-label="Note toolbar"
+            >
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-600 hover:text-white hover:border-red-600"
+                id="btn-delete-note"
+                title="Delete note"
+                aria-label="Delete note"
+              >
+                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+              </button>
+              <div class="mx-1 h-4 w-px bg-gray-300" aria-hidden="true"></div>
+              <span class="text-xs font-bold uppercase tracking-wide text-gray-500">Export</span>
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                id="btn-export-txt"
+                title="Export as .txt"
+                aria-label="Export as text"
+              >
+                .txt
+              </button>
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                id="btn-export-md"
+                title="Export as .md"
+                aria-label="Export as Markdown"
+              >
+                .md
+              </button>
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                id="btn-export-json"
+                title="Export as .json"
+                aria-label="Export as JSON"
+              >
+                .json
+              </button>
+              <div
+                style="margin-left: auto; font-size: 0.75rem; color: #6b7280"
+                id="word-count"
+                aria-live="polite"
+              >
+                0 words - 0 chars
+              </div>
+            </div>
+
             <div
               id="editor-wrapper"
               style="display: none; flex-direction: column; flex: 1; overflow: hidden"
             >
-              <div
-                class="editor-toolbar border-b border-gray-100 px-4 py-3 bg-gray-50"
-                role="toolbar"
-                aria-label="Note toolbar"
-              >
-                <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-600 hover:text-white hover:border-red-600"
-                  id="btn-delete-note"
-                  title="Delete note"
-                  aria-label="Delete note"
-                >
-                  <i class="fa-solid fa-trash" aria-hidden="true"></i>
-                </button>
-                <div class="mx-1 h-4 w-px bg-gray-300" aria-hidden="true"></div>
-                <span class="text-xs font-bold uppercase tracking-wide text-gray-500">Export</span>
-                <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                  id="btn-export-txt"
-                  title="Export as .txt"
-                  aria-label="Export as text"
-                >
-                  .txt
-                </button>
-                <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                  id="btn-export-md"
-                  title="Export as .md"
-                  aria-label="Export as Markdown"
-                >
-                  .md
-                </button>
-                <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                  id="btn-export-json"
-                  title="Export as .json"
-                  aria-label="Export as JSON"
-                >
-                  .json
-                </button>
-                <div
-                  style="margin-left: auto; font-size: 0.75rem; color: #6b7280"
-                  id="word-count"
-                  aria-live="polite"
-                >
-                  0 words - 0 chars
-                </div>
-              </div>
-
               <input
                 type="text"
                 class="editor-title"
@@ -291,55 +292,54 @@
                 placeholder="Start typing your secure note here...&#10;&#10;Use AI features below to summarize, extract key points, find action items, or analyze keywords."
                 aria-label="Note content"
               ></textarea>
+            </div>
 
-              <div class="ai-panel">
-                <div class="ai-panel-title" aria-label="AI features">
-                  <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
-                  AI Features
-                </div>
-                <div
-                  class="mb-3 flex flex-wrap gap-2"
-                  role="toolbar"
-                  aria-label="AI analysis tools"
-                >
-                  <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                    id="btn-summarize"
-                    aria-label="Summarize note"
-                  >
-                    <i class="fa-solid fa-file-lines" aria-hidden="true"></i>Summarize
-                  </button>
-                  <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                    id="btn-keypoints"
-                    aria-label="Extract key points"
-                  >
-                    <i class="fa-solid fa-key" aria-hidden="true"></i>Key Points
-                  </button>
-                  <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                    id="btn-actions"
-                    aria-label="Find action items"
-                  >
-                    <i class="fa-solid fa-list-check" aria-hidden="true"></i>Action Items
-                  </button>
-                  <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
-                    id="btn-keywords"
-                    aria-label="Analyze keywords"
-                  >
-                    <i class="fa-solid fa-chart-column" aria-hidden="true"></i>Keywords
-                  </button>
-                </div>
-                <div
-                  class="ai-output"
-                  id="ai-output"
-                  aria-live="polite"
-                  aria-label="AI analysis output"
-                >
-                  AI output will appear here...
-                </div>
+            <!-- Always-visible AI panel -->
+            <div class="ai-panel">
+              <div class="ai-panel-title" aria-label="AI features">
+                <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+                AI Features
               </div>
+              <div
+                class="mb-3 flex flex-wrap gap-2"
+                role="toolbar"
+                aria-label="AI analysis tools"
+              >
+                <button
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                  id="btn-summarize"
+                  aria-label="Summarize note"
+                >
+                  <i class="fa-solid fa-file-lines" aria-hidden="true"></i>Summarize
+                </button>
+                <button
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                  id="btn-keypoints"
+                  aria-label="Extract key points"
+                >
+                  <i class="fa-solid fa-key" aria-hidden="true"></i>Key Points
+                </button>
+                <button
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                  id="btn-actions"
+                  aria-label="Find action items"
+                >
+                  <i class="fa-solid fa-list-check" aria-hidden="true"></i>Action Items
+                </button>
+                <button
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border bg-white px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:border-primary hover:text-primary hover:bg-red-50"
+                  id="btn-keywords"
+                  aria-label="Analyze keywords"
+                >
+                  <i class="fa-solid fa-chart-column" aria-hidden="true"></i>Keywords
+                </button>
+              </div>
+              <div
+                class="ai-output"
+                id="ai-output"
+                aria-live="polite"
+                aria-label="AI analysis output"
+              ></div>
             </div>
           </div>
         </div>
