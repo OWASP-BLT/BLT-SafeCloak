@@ -64,13 +64,12 @@ const NotesApp = (() => {
   let saveTimer = null;
 
   async function getDerivedKey() {
-    if (passphrase) return passphrase; // cached CryptoKey
+    if (passphrase) return passphrase; 
     let salt = localStorage.getItem(PASS_KEY);
     if (!salt) {
       salt = Crypto.randomId(32);
       localStorage.setItem(PASS_KEY, salt);
     }
-    // deriveKey uses PBKDF2(passphrase=contextString, salt=storedSalt, 100k iterations, SHA-256)
     passphrase = await Crypto.deriveKey("safecloak-notes-v2", salt);
     return passphrase;
   }
