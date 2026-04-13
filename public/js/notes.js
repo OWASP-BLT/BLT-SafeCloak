@@ -63,14 +63,6 @@ const NotesApp = (() => {
   let passphrase = null;
   let saveTimer = null;
 
-  /* ── Persistence ── */
-
-  /**
-   * Returns a CryptoKey derived from a random per-device salt stored in
-   * localStorage.  The salt itself is NOT the key — it feeds PBKDF2 together
-   * with a fixed context string so that learning the localStorage value gives
-   * an attacker no direct access to the encryption key.
-   */
   async function getDerivedKey() {
     if (passphrase) return passphrase; // cached CryptoKey
     let salt = localStorage.getItem(PASS_KEY);
