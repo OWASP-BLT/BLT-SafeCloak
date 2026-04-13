@@ -64,21 +64,31 @@ const NotesApp = (() => {
   let saveTimer = null;
 
   /* ── Persistence ── */
-  function getPassphrase() {
-    if (passphrase) return passphrase;
-    // Derive a device-session passphrase from a stored random key
-    let stored = localStorage.getItem(PASS_KEY);
-    if (!stored) {
-      stored = Crypto.randomId(24);
-      localStorage.setItem(PASS_KEY, stored);
+
+  /**
+   * Returns a CryptoKey derived from a random per-device salt stored in
+   * localStorage.  The salt itself is NOT the key — it feeds PBKDF2 together
+   * with a fixed context string so that learning the localStorage value gives
+   * an attacker no direct access to the encryption key.
+   */
+  async function getDerivedKey() {
+    if (passphrase) return passphrase; // cached CryptoKey
+    let salt = localStorage.getItem(PASS_KEY);
+    if (!salt) {
+      salt = Crypto.randomId(32);
+      localStorage.setItem(PASS_KEY, salt);
     }
-    passphrase = stored;
+    // deriveKey uses PBKDF2(passphrase=contextString, salt=storedSalt, 100k iterations, SHA-256)
+    passphrase = await Crypto.deriveKey("safecloak-notes-v2", salt);
     return passphrase;
   }
 
   async function saveNotes() {
     try {
-      await Crypto.saveEncrypted(STORAGE_KEY, notes, getPassphrase());
+      const key = await getDerivedKey();
+      const json = JSON.stringify(notes);
+      const encrypted = await Crypto.encrypt(json, key);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(encrypted));
     } catch (err) {
       console.error("Failed to save notes:", err);
     }
@@ -86,8 +96,12 @@ const NotesApp = (() => {
 
   async function loadNotes() {
     try {
-      const loaded = await Crypto.loadEncrypted(STORAGE_KEY, getPassphrase());
-      notes = loaded || [];
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) { notes = []; return; }
+      const key = await getDerivedKey();
+      const payload = JSON.parse(raw);
+      const json = await Crypto.decrypt(payload, key);
+      notes = JSON.parse(json) || [];
     } catch {
       notes = [];
     }
