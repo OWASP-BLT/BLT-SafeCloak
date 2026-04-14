@@ -25,27 +25,39 @@ const ConsentManager = (() => {
     }
   }
 
+  function buildHashPayload(entry) {
+    return JSON.stringify({
+      type: (entry.type || "").trim(),
+      name: (entry.name || "").trim(),
+      isoTime: (entry.isoTime || "").trim(),
+      details: (entry.details || "").trim(),
+      purpose: (entry.purpose || "").trim(),
+      participants: Array.isArray(entry.participants)
+        ? entry.participants.map((p) => String(p).trim()).sort()
+        : [],
+    });
+  }
+
   /* ── Record a consent event ── */
   async function record(event) {
     const ts = Date.now();
     const entry = {
       id: ts.toString() + Math.random().toString(36).slice(2, 7),
-      type: event.type || "recorded", // 'given' | 'withdrawn' | 'recorded'
-      name: event.name || "Unnamed event",
-      details: event.details || "",
-      purpose: event.purpose || "",
-      participants: event.participants || [],
+      type: (event.type || "recorded").trim(), // 'given' | 'withdrawn' | 'recorded'
+      name: (event.name || "Unnamed event").trim(),
+      details: (event.details || "").trim(),
+      purpose: (event.purpose || "").trim(),
+      participants: Array.isArray(event.participants)
+        ? event.participants.map((p) => String(p).trim())
+        : [],
       timestamp: ts,
       isoTime: new Date(ts).toISOString(),
       userAgent: navigator.userAgent.slice(0, 100),
+      hashVersion: 2,
     };
     // Create a tamper-evident hash of the entry data
     try {
-      const participantsStr = Array.isArray(entry.participants)
-        ? entry.participants.slice().sort().join(",")
-        : String(entry.participants);
-      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}|${entry.purpose}|${participantsStr}`;
-      entry.hash = await Crypto.sha256(data);
+      entry.hash = await Crypto.sha256(buildHashPayload(entry));
     } catch {
       entry.hash = "hash-unavailable";
     }
@@ -90,11 +102,15 @@ const ConsentManager = (() => {
     const entry = log.find((e) => e.id === id);
     if (!entry) return showToast("Entry not found", "error");
     try {
-      const participantsStr = Array.isArray(entry.participants)
-        ? entry.participants.slice().sort().join(",")
-        : String(entry.participants);
-      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}|${entry.purpose}|${participantsStr}`;
-      const hash = await Crypto.sha256(data);
+      let payload;
+      if (!entry.hashVersion) {
+       
+        payload = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}`;
+      } else {
+    
+        payload = buildHashPayload(entry);
+      }
+      const hash = await Crypto.sha256(payload);
       if (hash === entry.hash) {
         showToast("✅ Entry integrity verified — untampered", "success");
       } else {
