@@ -25,16 +25,22 @@ const ConsentManager = (() => {
     }
   }
 
+  function normalizeText(value, fallback = "") {
+    const normalized = value == null ? "" : String(value).trim();
+    return normalized || fallback;
+  }
+
   function buildHashPayload(entry) {
     return JSON.stringify({
-      type: (entry.type || "").trim(),
-      name: (entry.name || "").trim(),
-      isoTime: (entry.isoTime || "").trim(),
-      details: (entry.details || "").trim(),
-      purpose: (entry.purpose || "").trim(),
+      type: normalizeText(entry.type),
+      name: normalizeText(entry.name),
+      isoTime: normalizeText(entry.isoTime),
+      details: normalizeText(entry.details),
+      purpose: normalizeText(entry.purpose),
       participants: Array.isArray(entry.participants)
         ? entry.participants.map((p) => String(p).trim()).sort()
         : [],
+      timestamp: entry.timestamp ?? null,
     });
   }
 
@@ -43,10 +49,10 @@ const ConsentManager = (() => {
     const ts = Date.now();
     const entry = {
       id: ts.toString() + Math.random().toString(36).slice(2, 7),
-      type: (event.type || "recorded").trim(), // 'given' | 'withdrawn' | 'recorded'
-      name: (event.name || "Unnamed event").trim(),
-      details: (event.details || "").trim(),
-      purpose: (event.purpose || "").trim(),
+      type: normalizeText(event.type, "recorded"), // 'given' | 'withdrawn' | 'recorded'
+      name: normalizeText(event.name, "Unnamed event"),
+      details: normalizeText(event.details),
+      purpose: normalizeText(event.purpose),
       participants: Array.isArray(event.participants)
         ? event.participants.map((p) => String(p).trim())
         : [],
@@ -112,7 +118,14 @@ const ConsentManager = (() => {
       }
       const hash = await Crypto.sha256(payload);
       if (hash === entry.hash) {
-        showToast("✅ Entry integrity verified — untampered", "success");
+        if (!entry.hashVersion) {
+          showToast(
+            "⚠️ Legacy entry verified (pre-upgrade) — purpose & participants not covered by this hash",
+            "info"
+          );
+        } else {
+          showToast("✅ Entry integrity verified — untampered", "success");
+        }
       } else {
         showToast("⚠️ Hash mismatch — entry may have been tampered with!", "error");
       }
