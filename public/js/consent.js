@@ -41,7 +41,10 @@ const ConsentManager = (() => {
     };
     // Create a tamper-evident hash of the entry data
     try {
-      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}`;
+      const participantsStr = Array.isArray(entry.participants)
+        ? entry.participants.slice().sort().join(",")
+        : String(entry.participants);
+      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}|${entry.purpose}|${participantsStr}`;
       entry.hash = await Crypto.sha256(data);
     } catch {
       entry.hash = "hash-unavailable";
@@ -87,7 +90,10 @@ const ConsentManager = (() => {
     const entry = log.find((e) => e.id === id);
     if (!entry) return showToast("Entry not found", "error");
     try {
-      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}`;
+      const participantsStr = Array.isArray(entry.participants)
+        ? entry.participants.slice().sort().join(",")
+        : String(entry.participants);
+      const data = `${entry.type}|${entry.name}|${entry.isoTime}|${entry.details}|${entry.purpose}|${participantsStr}`;
       const hash = await Crypto.sha256(data);
       if (hash === entry.hash) {
         showToast("✅ Entry integrity verified — untampered", "success");
