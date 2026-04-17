@@ -520,6 +520,94 @@ def test_three_clients_connect_and_see_cameras(base_url):
 
 
 # ---------------------------------------------------------------------------
+# Lobby permission-button tests (Safari getUserMedia user-gesture fix)
+# ---------------------------------------------------------------------------
+
+# JavaScript shim that blocks getUserMedia by always throwing NotAllowedError.
+# Injected via add_init_script to simulate Safari's behaviour of not triggering
+# the permission popup when getUserMedia is called outside a user gesture.
+_DENY_GET_USER_MEDIA = """
+(function () {
+  if (navigator.mediaDevices) {
+    navigator.mediaDevices.getUserMedia = async function () {
+      throw new DOMException("Permission denied", "NotAllowedError");
+    };
+  }
+})();
+"""
+
+
+def test_lobby_permission_button_appears_when_media_denied(base_url):
+    """
+    When getUserMedia fails on page load (simulating Safari not prompting
+    automatically without a user gesture), the lobby must show a visible
+    'Allow Camera & Microphone' button.  Clicking that button (the user
+    gesture Safari requires) re-triggers getUserMedia and acquires the
+    preview stream.
+
+    Manual test steps for Safari:
+    1. Open /video-chat in Safari.
+    2. Confirm no automatic permission popup appears on page load.
+    3. Confirm the 'Allow Camera & Microphone' button is visible in the
+       camera preview area.
+    4. Click the button and confirm Safari now shows the permission popup.
+    5. Grant access and confirm the live camera preview appears.
+
+    Manual test steps for Chrome:
+    1. Open /video-chat in Chrome — the permission popup should appear
+       immediately without needing to click any button.
+    2. If permissions were previously denied, the button should appear and
+       clicking it should re-prompt (after resetting site permissions).
+    """
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            # Grant browser-level permissions but block getUserMedia via script
+            # to simulate Safari silently failing on non-gesture page load.
+            ctx = browser.new_context(permissions=["camera", "microphone"])
+            ctx.add_init_script(_DENY_GET_USER_MEDIA)
+
+            page = ctx.new_page()
+            page.goto(f"{base_url}/video-chat")
+
+            # Wait for the 'Allow' button to become visible (getUserMedia failed).
+            page.wait_for_function(
+                "document.getElementById('btn-allow-media') !== null && "
+                "document.getElementById('btn-allow-media').style.display !== 'none'",
+                timeout=TIMEOUT_MS,
+            )
+            allow_btn = page.locator("#btn-allow-media")
+            assert allow_btn.is_visible(), (
+                "Allow Camera & Microphone button must appear when getUserMedia fails"
+            )
+
+            # Restore a working getUserMedia shim (simulates the browser
+            # granting access after the user interacts with the permission popup
+            # triggered by the button click).
+            page.evaluate(_MOCK_GET_USER_MEDIA)
+
+            # Click the button — this is the user gesture Safari requires before
+            # it will show the native permission dialog.
+            allow_btn.click()
+
+            # After the click, the stream should be acquired and the button hidden.
+            page.wait_for_function(
+                "document.getElementById('btn-allow-media') !== null && "
+                "document.getElementById('btn-allow-media').style.display === 'none'",
+                timeout=TIMEOUT_MS,
+            )
+
+            status_text = page.evaluate(
+                "document.getElementById('prejoin-status').textContent"
+            )
+            assert status_text and "unavailable" not in status_text.lower(), (
+                "Preview status should not read 'unavailable' after permission is granted"
+            )
+        finally:
+            browser.close()
+
+
+# ---------------------------------------------------------------------------
 # VoiceChanger unit tests (run in a headless browser page)
 # ---------------------------------------------------------------------------
 

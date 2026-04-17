@@ -151,9 +151,19 @@
                 ></video>
                 <div
                   id="prejoin-placeholder"
-                  class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-gray-300"
+                  class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-sm font-semibold text-gray-300"
                 >
-                  Camera preview unavailable
+                  <span id="prejoin-placeholder-text">Camera preview unavailable</span>
+                  <button
+                    id="btn-allow-media"
+                    type="button"
+                    style="display: none"
+                    class="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    aria-label="Request camera and microphone access"
+                  >
+                    <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                    Allow Camera &amp; Microphone
+                  </button>
                 </div>
                 <div class="video-label rounded-md bg-black/65 px-2 py-1 text-xs text-white">
                   <span class="status-dot online" aria-hidden="true"></span>
