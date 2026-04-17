@@ -717,7 +717,7 @@
         return;
       }
 
-      showToast("Public room created and listed on homepage", "success");
+      showToast("Public room created and listed on the homepage", "success");
       goToRoom(roomId, displayName);
     } catch {
       showToast("Could not create public room. Please try again.", "error");

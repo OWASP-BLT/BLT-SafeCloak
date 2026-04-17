@@ -23,6 +23,7 @@ PUBLIC_ROOM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 PUBLIC_ROOM_ID_LENGTH = 6
 PUBLIC_ROOM_TTL_HOURS = 4
 PUBLIC_ROOM_MAX_COUNT = 100
+PUBLIC_ROOM_ID_MAX_RETRIES = 20
 
 PUBLIC_ROOMS = []
 
@@ -75,8 +76,13 @@ def _create_public_room(payload):
     existing_ids = {room['id'] for room in PUBLIC_ROOMS}
 
     room_id = _generate_room_id()
-    while room_id in existing_ids:
+    retries = 0
+    while room_id in existing_ids and retries < PUBLIC_ROOM_ID_MAX_RETRIES:
         room_id = _generate_room_id()
+        retries += 1
+
+    if room_id in existing_ids:
+        return {'error': 'Unable to allocate room ID. Please try again.'}, 503
 
     room = {
         'id': room_id,
@@ -103,7 +109,7 @@ async def _read_json_body(request):
         if isinstance(payload, dict):
             return payload
         return None
-    except Exception:  # pylint: disable=broad-except
+    except (json.JSONDecodeError, TypeError, ValueError):
         return None
 
 
