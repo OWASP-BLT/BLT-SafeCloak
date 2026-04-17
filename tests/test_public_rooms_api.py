@@ -5,11 +5,11 @@ import os
 import sys
 from unittest.mock import MagicMock
 
-
 mock_workers = MagicMock()
 
 
 class FakeResponse:
+
     def __init__(self, body, status=200, headers=None):
         if isinstance(body, str):
             self.body = body.encode('utf-8')
@@ -29,12 +29,15 @@ mock_workers.Response = FakeResponse
 mock_workers.WorkerEntrypoint = FakeWorkerEntrypoint
 sys.modules['workers'] = mock_workers
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, repo_root)
+sys.path.insert(0, os.path.join(repo_root, 'src'))
 
-main = importlib.import_module('src.main')
+main = importlib.import_module('main')
 
 
 class FakeRequest:
+
     def __init__(self, method, url, body=''):
         self.method = method
         self.url = url
@@ -61,7 +64,11 @@ def test_create_public_room_returns_201_and_room_payload():
     request = FakeRequest(
         'POST',
         'https://example.com/api/public-rooms',
-        json.dumps({'roomName': 'Security Standup', 'topic': 'Threat modeling', 'hostName': 'Alice'}),
+        json.dumps({
+            'roomName': 'Security Standup',
+            'topic': 'Threat modeling',
+            'hostName': 'Alice'
+        }),
     )
 
     response = _call(request)
@@ -79,7 +86,11 @@ def test_list_public_rooms_returns_newest_first():
         FakeRequest(
             'POST',
             'https://example.com/api/public-rooms',
-            json.dumps({'roomName': 'Room A', 'topic': 'Topic A', 'hostName': 'Host A'}),
+            json.dumps({
+                'roomName': 'Room A',
+                'topic': 'Topic A',
+                'hostName': 'Host A'
+            }),
         ))
     assert first_response.status_code == 201
 
@@ -87,7 +98,11 @@ def test_list_public_rooms_returns_newest_first():
         FakeRequest(
             'POST',
             'https://example.com/api/public-rooms',
-            json.dumps({'roomName': 'Room B', 'topic': 'Topic B', 'hostName': 'Host B'}),
+            json.dumps({
+                'roomName': 'Room B',
+                'topic': 'Topic B',
+                'hostName': 'Host B'
+            }),
         ))
     assert second_response.status_code == 201
 
@@ -105,7 +120,10 @@ def test_create_public_room_requires_name_and_topic():
         FakeRequest(
             'POST',
             'https://example.com/api/public-rooms',
-            json.dumps({'roomName': '', 'topic': 'Topic'}),
+            json.dumps({
+                'roomName': '',
+                'topic': 'Topic'
+            }),
         ))
     missing_name_payload = _decode_json_response(missing_name)
     assert missing_name.status_code == 400
@@ -115,7 +133,10 @@ def test_create_public_room_requires_name_and_topic():
         FakeRequest(
             'POST',
             'https://example.com/api/public-rooms',
-            json.dumps({'roomName': 'Room', 'topic': ''}),
+            json.dumps({
+                'roomName': 'Room',
+                'topic': ''
+            }),
         ))
     missing_topic_payload = _decode_json_response(missing_topic)
     assert missing_topic.status_code == 400

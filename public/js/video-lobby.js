@@ -290,7 +290,8 @@
       return;
     }
 
-    const levels = saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
+    const levels =
+      saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
     LOBBY_EFFECT_ORDER.forEach((mode) => {
       const raw = Number(levels[mode]);
       const value = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
@@ -651,10 +652,7 @@
     }
 
     if (!isValidRoomId(roomId)) {
-      showToast(
-        "Room ID must be 6 characters: A-Z (except I,O) and digits 2-9",
-        "error"
-      );
+      showToast("Room ID must be 6 characters: A-Z (except I,O) and digits 2-9", "error");
       return;
     }
 
