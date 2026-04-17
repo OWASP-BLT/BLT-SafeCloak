@@ -712,7 +712,7 @@
           if (refreshPublicRoomsBtn) refreshPublicRoomsBtn.disabled = true;
           try {
             const response = await fetch("/api/public-rooms");
-            if (!response.ok) throw new Error("bad status");
+            if (!response.ok) throw new Error(`Failed to fetch public rooms (${response.status})`);
             const payload = await response.json();
             const rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
             renderPublicRooms(rooms);

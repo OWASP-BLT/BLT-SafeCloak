@@ -101,16 +101,16 @@ def _create_public_room(payload):
 
 
 async def _read_json_body(request):
+    raw = await request.text()
+    if not raw:
+        return {}
     try:
-        raw = await request.text()
-        if not raw:
-            return {}
         payload = json.loads(raw)
-        if isinstance(payload, dict):
-            return payload
+    except json.JSONDecodeError:
         return None
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
+    if isinstance(payload, dict):
+        return payload
+    return None
 
 
 class Default(WorkerEntrypoint):

@@ -699,6 +699,7 @@
       try {
         payload = await response.json();
       } catch {
+        // Some failure responses may not include JSON; fallback message is handled below.
         payload = null;
       }
 
