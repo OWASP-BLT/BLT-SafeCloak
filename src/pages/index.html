@@ -398,6 +398,37 @@
         </div>
       </section>
 
+      <section class="px-4 pb-12 sm:px-6 lg:px-8" aria-labelledby="public-rooms-heading">
+        <div class="mx-auto max-w-6xl">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-gray-900 sm:text-3xl" id="public-rooms-heading">
+                Public Rooms
+              </h2>
+              <p class="mt-1 text-sm text-gray-600">
+                Join rooms that hosts have listed publicly from the lobby.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="refresh-public-rooms"
+              class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+              aria-label="Refresh public room listings"
+            >
+              <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+              Refresh
+            </button>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3" id="public-room-list"></div>
+          <p
+            id="public-room-empty"
+            class="hidden rounded-md border border-neutral-border bg-white p-4 text-sm font-semibold text-gray-600"
+          >
+            No public rooms are currently listed. Start one from the Video Chat lobby.
+          </p>
+        </div>
+      </section>
+
       <!-- How it Works -->
       <section class="px-4 pb-14 sm:px-6 lg:px-8" aria-labelledby="how-heading">
         <div class="mx-auto max-w-6xl">
@@ -602,10 +633,93 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {
+        const PUBLIC_ROOM_ID_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+        const publicRoomList = document.getElementById("public-room-list");
+        const publicRoomEmpty = document.getElementById("public-room-empty");
+        const refreshPublicRoomsBtn = document.getElementById("refresh-public-rooms");
         const searchInput = document.getElementById("feature-search");
         const cards = Array.from(document.querySelectorAll("[data-feature-card]"));
         const emptyState = document.getElementById("feature-empty");
         const sideLinks = Array.from(document.querySelectorAll(".side-link"));
+
+        function clearPublicRoomList() {
+          if (publicRoomList) {
+            publicRoomList.innerHTML = "";
+          }
+        }
+
+        function setPublicRoomEmptyState(isVisible) {
+          if (publicRoomEmpty) {
+            publicRoomEmpty.classList.toggle("hidden", !isVisible);
+          }
+        }
+
+        function renderPublicRooms(rooms) {
+          clearPublicRoomList();
+          if (!publicRoomList) return;
+
+          if (!rooms.length) {
+            setPublicRoomEmptyState(true);
+            return;
+          }
+
+          setPublicRoomEmptyState(false);
+
+          rooms.forEach((room) => {
+            const roomId = typeof room.id === "string" ? room.id.trim().toUpperCase() : "";
+            if (!PUBLIC_ROOM_ID_RE.test(roomId)) return;
+
+            const card = document.createElement("article");
+            card.className = "surface-card rounded-xl p-5";
+
+            const title = document.createElement("h3");
+            title.className = "text-lg font-bold text-gray-900";
+            title.textContent = room.name || "Public Room";
+            card.appendChild(title);
+
+            const topic = document.createElement("p");
+            topic.className = "mt-2 text-sm text-gray-600";
+            topic.textContent = room.topic || "No topic provided";
+            card.appendChild(topic);
+
+            const meta = document.createElement("p");
+            meta.className = "mt-3 text-xs text-gray-500";
+            const hostName = room.hostName ? `Host: ${room.hostName} · ` : "";
+            meta.textContent = `${hostName}Room ID: ${roomId}`;
+            card.appendChild(meta);
+
+            const joinLink = document.createElement("a");
+            joinLink.className =
+              "mt-4 inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700";
+            joinLink.href = `/video-chat?room=${encodeURIComponent(roomId)}`;
+            joinLink.setAttribute("aria-label", `Join public room ${room.name || roomId}`);
+            joinLink.innerHTML =
+              '<i class="fa-solid fa-door-open" aria-hidden="true"></i><span>Join Public Room</span>';
+            card.appendChild(joinLink);
+
+            publicRoomList.appendChild(card);
+          });
+
+          if (!publicRoomList.children.length) {
+            setPublicRoomEmptyState(true);
+          }
+        }
+
+        async function loadPublicRooms() {
+          if (refreshPublicRoomsBtn) refreshPublicRoomsBtn.disabled = true;
+          try {
+            const response = await fetch("/api/public-rooms");
+            if (!response.ok) throw new Error("bad status");
+            const payload = await response.json();
+            const rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
+            renderPublicRooms(rooms);
+          } catch {
+            clearPublicRoomList();
+            setPublicRoomEmptyState(true);
+          } finally {
+            if (refreshPublicRoomsBtn) refreshPublicRoomsBtn.disabled = false;
+          }
+        }
 
         if (searchInput) {
           searchInput.addEventListener("input", (event) => {
@@ -631,6 +745,12 @@
             link.classList.add("active");
           });
         });
+
+        if (refreshPublicRoomsBtn) {
+          refreshPublicRoomsBtn.addEventListener("click", loadPublicRooms);
+        }
+
+        void loadPublicRooms();
       });
     </script>
     <script src="js/ui.js"></script>

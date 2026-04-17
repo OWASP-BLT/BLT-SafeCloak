@@ -384,6 +384,57 @@
               <p class="text-sm text-gray-600">
                 Create a room and enter the call page. Share your room ID or room link with others.
               </p>
+              <div class="mt-4 grid gap-3">
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-semibold text-gray-700"
+                    for="public-room-name-input"
+                    >Public Room Name</label
+                  >
+                  <input
+                    type="text"
+                    id="public-room-name-input"
+                    class="w-full rounded-md border border-neutral-border px-4 py-2 text-gray-900 placeholder-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                    placeholder="Optional for private room, required for public listing"
+                    autocomplete="off"
+                    maxlength="60"
+                    aria-label="Public room name"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-semibold text-gray-700"
+                    for="public-room-topic-input"
+                    >Topic</label
+                  >
+                  <input
+                    type="text"
+                    id="public-room-topic-input"
+                    class="w-full rounded-md border border-neutral-border px-4 py-2 text-gray-900 placeholder-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                    placeholder="Optional for private room, required for public listing"
+                    autocomplete="off"
+                    maxlength="120"
+                    aria-label="Public room topic"
+                  />
+                </div>
+                <label
+                  class="inline-flex items-start gap-2 rounded-md border border-neutral-border bg-white px-3 py-2 text-sm text-gray-700"
+                  for="public-room-checkbox"
+                >
+                  <input
+                    type="checkbox"
+                    id="public-room-checkbox"
+                    class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    aria-label="List this room publicly on homepage"
+                  />
+                  <span>
+                    List this room publicly on homepage
+                    <span class="block text-xs text-gray-500"
+                      >Requires room name and topic so others can discover and join.</span
+                    >
+                  </span>
+                </label>
+              </div>
               <button
                 class="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2.5 sm:py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                 id="btn-create-room"

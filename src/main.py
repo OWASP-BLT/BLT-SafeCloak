@@ -1,9 +1,13 @@
 # pylint: disable=too-few-public-methods
-from workers import WorkerEntrypoint, Response
-from urllib.parse import urlparse
+import json
+import secrets
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
-from libs.utils import html_response, cors_response
+from workers import Response, WorkerEntrypoint
+
+from libs.utils import cors_response, html_response, json_response
 
 # Route to HTML page mapping
 PAGES_MAP = {
@@ -13,6 +17,94 @@ PAGES_MAP = {
     '/notes': 'notes.html',
     '/consent': 'consent.html',
 }
+
+PUBLIC_ROOM_PATH = '/api/public-rooms'
+PUBLIC_ROOM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+PUBLIC_ROOM_ID_LENGTH = 6
+PUBLIC_ROOM_TTL_HOURS = 4
+PUBLIC_ROOM_MAX_COUNT = 100
+
+PUBLIC_ROOMS = []
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
+
+
+def _normalize_text(value, max_length):
+    normalized = ' '.join(str(value or '').strip().split())
+    return normalized[:max_length]
+
+
+def _generate_room_id():
+    return ''.join(secrets.choice(PUBLIC_ROOM_ID_CHARS) for _ in range(PUBLIC_ROOM_ID_LENGTH))
+
+
+def _cleanup_public_rooms():
+    cutoff = _utc_now() - timedelta(hours=PUBLIC_ROOM_TTL_HOURS)
+    PUBLIC_ROOMS[:] = [room for room in PUBLIC_ROOMS if room['created_at'] >= cutoff]
+
+
+def _serialize_room(room):
+    return {
+        'id': room['id'],
+        'name': room['name'],
+        'topic': room['topic'],
+        'hostName': room['host_name'],
+        'createdAt': room['created_at'].isoformat(),
+    }
+
+
+def _list_public_rooms():
+    _cleanup_public_rooms()
+    sorted_rooms = sorted(PUBLIC_ROOMS, key=lambda room: room['created_at'], reverse=True)
+    return {'rooms': [_serialize_room(room) for room in sorted_rooms]}
+
+
+def _create_public_room(payload):
+    room_name = _normalize_text(payload.get('roomName'), 60)
+    topic = _normalize_text(payload.get('topic'), 120)
+    host_name = _normalize_text(payload.get('hostName'), 40)
+
+    if not room_name:
+        return {'error': 'roomName is required'}, 400
+    if not topic:
+        return {'error': 'topic is required'}, 400
+
+    _cleanup_public_rooms()
+    existing_ids = {room['id'] for room in PUBLIC_ROOMS}
+
+    room_id = _generate_room_id()
+    while room_id in existing_ids:
+        room_id = _generate_room_id()
+
+    room = {
+        'id': room_id,
+        'name': room_name,
+        'topic': topic,
+        'host_name': host_name,
+        'created_at': _utc_now(),
+    }
+    PUBLIC_ROOMS.append(room)
+
+    if len(PUBLIC_ROOMS) > PUBLIC_ROOM_MAX_COUNT:
+        PUBLIC_ROOMS.sort(key=lambda entry: entry['created_at'])
+        PUBLIC_ROOMS[:] = PUBLIC_ROOMS[-PUBLIC_ROOM_MAX_COUNT:]
+
+    return {'room': _serialize_room(room)}, 201
+
+
+async def _read_json_body(request):
+    try:
+        raw = await request.text()
+        if not raw:
+            return {}
+        payload = json.loads(raw)
+        if isinstance(payload, dict):
+            return payload
+        return None
+    except Exception:  # pylint: disable=broad-except
+        return None
 
 
 class Default(WorkerEntrypoint):
@@ -26,6 +118,17 @@ class Default(WorkerEntrypoint):
         # Handle CORS preflight
         if request.method == 'OPTIONS':
             return cors_response()
+
+        if path == PUBLIC_ROOM_PATH:
+            if request.method == 'GET':
+                return json_response(_list_public_rooms())
+            if request.method == 'POST':
+                payload = await _read_json_body(request)
+                if payload is None:
+                    return json_response({'error': 'Invalid JSON body'}, status=400)
+                body, status = _create_public_room(payload)
+                return json_response(body, status=status)
+            return json_response({'error': 'Method not allowed'}, status=405)
 
         # Handle GET requests for HTML pages
         if request.method == 'GET' and path in PAGES_MAP:
