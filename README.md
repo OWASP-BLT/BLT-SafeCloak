@@ -105,6 +105,21 @@ All pages use clean URLs without `.html` extensions:
 - `/notes` - Secure notes
 - `/consent` - Consent management
 
+### Operational Endpoints
+
+The worker exposes the web manifest endpoint for app metadata:
+
+- `/manifest.json` - Web app manifest for install support
+
+### PWA Setup
+
+PWA install support is enabled with:
+
+- `/manifest.json` served by the worker
+- `rel="manifest"` + `theme-color` in all page heads
+- `public/sw.js` service worker with app-shell caching
+- service worker registration in `public/js/ui.js`
+
 ## Security
 
 - All sensitive data is encrypted client-side before transmission

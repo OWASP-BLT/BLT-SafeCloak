@@ -33,6 +33,14 @@ function showToast(message, type = "info", duration = 3500) {
 
 /* ── Navbar toggle ── */
 document.addEventListener("DOMContentLoaded", () => {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch((err) => {
+        console.error("Service worker registration failed", err);
+      });
+    });
+  }
+
   const toggle = document.getElementById("navbar-toggle");
   const nav = document.getElementById("navbar-nav");
   if (toggle && nav) {
