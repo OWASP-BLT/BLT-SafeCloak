@@ -1078,6 +1078,22 @@ const VideoChat = (() => {
       );
       return;
     }
+
+    // Validate room ID with backend before initiating WebRTC connection
+    try {
+      const response = await fetch(`/api/rooms/validate?room=${encodeURIComponent(remotePeerId)}`);
+      const data = await response.json();
+
+      if (!data.ok || !data.isValid) {
+        showToast("Backend rejected room ID — check format and try again", "error");
+        return;
+      }
+    } catch (err) {
+      // Network error or backend down — warn but allow P2P attempt to continue
+      console.warn("Backend validation failed:", err);
+      showToast("Warning: Could not validate room with server, proceeding offline", "warning");
+    }
+
     if (remotePeerId === state.peerId) {
       showToast("You cannot call yourself", "warning");
       return;
