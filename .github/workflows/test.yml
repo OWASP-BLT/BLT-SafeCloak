@@ -21,10 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
-      - name: Install Node dependencies
+      - name: Install dependencies
         run: npm ci
+
+      - name: Verify vendored PeerJS for E2E tests
+        run: test -f tests/vendor/peerjs.min.js
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -38,5 +40,5 @@ jobs:
       - name: Install Playwright browser
         run: playwright install chromium --with-deps
 
-      - name: Run video chat E2E tests
-        run: pytest tests/ -v --tb=short
+      - name: Run Playwright e2e tests
+        run: python -m pytest tests/ -v --tb=short

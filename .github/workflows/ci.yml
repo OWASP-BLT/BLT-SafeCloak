@@ -1,0 +1,94 @@
+name: CI Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - test/**
+      - feat/**
+      - fix/**
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Pin Wrangler for reproducible CI behavior.
+      WRANGLER_VERSION: "4.14.1"
+      WRANGLER_SEND_METRICS: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify vendored PeerJS for E2E tests
+        run: test -f tests/vendor/peerjs.min.js
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler@${WRANGLER_VERSION}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Start local app
+        run: |
+          wrangler --version
+          wrangler dev --config wrangler.toml --ip 127.0.0.1 --port 8787 > wrangler.log 2>&1 &
+          WRANGLER_PID=$!
+          echo "WRANGLER_PID=${WRANGLER_PID}" >> "$GITHUB_ENV"
+          echo "Waiting for wrangler dev on http://127.0.0.1:8787 ..."
+          for i in $(seq 1 30); do
+            if ! kill -0 "${WRANGLER_PID}" 2>/dev/null; then
+              echo "Wrangler exited before becoming ready."
+              tail -n 200 wrangler.log || true
+              exit 1
+            fi
+            if curl -sSf http://127.0.0.1:8787/ >/dev/null; then
+              echo "Wrangler is ready."
+              break
+            fi
+            echo "Attempt $i/30 — waiting..."
+            sleep 2
+          done
+          curl -sSf http://127.0.0.1:8787/ >/dev/null || {
+            echo "Wrangler did not become ready in time."
+            tail -n 200 wrangler.log || true
+            exit 1
+          }
+
+      - name: Run unit tests
+        run: python -m pytest tests/test_signaling.py -v
+
+      - name: Run Playwright e2e tests
+        # Uses local HTTP + local PeerJS test harness, avoiding external network flakiness.
+        run: python -m pytest tests/test_video_chat.py tests/test_peer_mesh.py -v --tb=short
+
+      - name: Upload wrangler log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrangler-log
+          path: wrangler.log
