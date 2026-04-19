@@ -8,11 +8,12 @@
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const PUBLIC_ROOMS_API_PATH = "/api/public-rooms";
+  const MEDIA_PREFS_STORAGE_KEY = "blt-safecloak-media-preferences";
   const LOBBY_EFFECT_ORDER = ["deep", "chipmunk", "robot", "echo", "voice1", "voice2", "voice3"];
 
   let previewStream = null;
-  let micEnabled = true;
-  let camEnabled = true;
+  let micEnabled = false;
+  let camEnabled = false;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -569,8 +570,10 @@
     for (const mediaConstraints of constraints) {
       try {
         previewStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
-        micEnabled = hasAudioTrack();
-        camEnabled = hasVideoTrack();
+        micEnabled = false;
+        camEnabled = false;
+        setTrackEnabled("audio", false);
+        setTrackEnabled("video", false);
         updatePreviewUI();
         initPreviewVoiceEngine();
         return;
@@ -601,6 +604,20 @@
     return target;
   }
 
+  function persistMediaPreferences() {
+    const micPref = hasAudioTrack() ? micEnabled : false;
+    const camPref = hasVideoTrack() ? camEnabled : false;
+
+    try {
+      window.sessionStorage.setItem(
+        MEDIA_PREFS_STORAGE_KEY,
+        JSON.stringify({ mic: micPref, cam: camPref })
+      );
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
   function goToRoom(roomId = "", displayName = "") {
     if (displayName) {
       try {
@@ -610,6 +627,7 @@
       }
     }
     persistVoicePreferences();
+    persistMediaPreferences();
     const target = buildRoomUrl(roomId);
     stopPreviewStream();
     window.location.href = target.toString();
@@ -735,6 +753,7 @@
     const micBtn = $("btn-preview-mic");
     const camBtn = $("btn-preview-cam");
     const publicRoomCheckbox = $("public-room-checkbox");
+    let shouldAutoJoinFromInvite = false;
 
     bindPreviewVoiceControls();
     restoreDisplayNameFromStorage();
@@ -768,6 +787,7 @@
       if (sharedRoomId) {
         roomInput.value = sharedRoomId;
         if (isValidRoomId(sharedRoomId)) {
+          shouldAutoJoinFromInvite = true;
           showToast("Room ID loaded from share link", "info");
         }
       }
@@ -793,6 +813,13 @@
     if (camBtn) camBtn.addEventListener("click", toggleCamPreview);
 
     await initPreviewStream();
+
+    if (shouldAutoJoinFromInvite) {
+      const existingName = normalizeDisplayName(displayNameInput ? displayNameInput.value : "");
+      if (existingName) {
+        joinRoom();
+      }
+    }
   });
 
   window.addEventListener("beforeunload", stopPreviewStream);

@@ -1,13 +1,15 @@
 # pylint: disable=too-few-public-methods
+import asyncio
 import json
 import secrets
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 from workers import Response, WorkerEntrypoint
 
-from libs.utils import cors_response, html_response, json_response
+from libs.utils import base_headers, cors_response, html_response, json_response
 
 # Route to HTML page mapping
 PAGES_MAP = {
@@ -121,29 +123,43 @@ class Default(WorkerEntrypoint):
         url = urlparse(request.url)
         path = url.path
 
-        # Handle CORS preflight
-        if request.method == 'OPTIONS':
-            return cors_response()
+        try:
+            # Handle CORS preflight
+            if request.method == 'OPTIONS':
+                return cors_response()
 
-        if path == PUBLIC_ROOM_PATH:
-            if request.method == 'GET':
-                return json_response(_list_public_rooms())
-            if request.method == 'POST':
-                payload = await _read_json_body(request)
-                if payload is None:
-                    return json_response({'error': 'Invalid JSON body'}, status=400)
-                body, status = _create_public_room(payload)
-                return json_response(body, status=status)
-            return json_response({'error': 'Method not allowed'}, status=405)
+            if path == PUBLIC_ROOM_PATH:
+                if request.method == 'GET':
+                    return json_response(_list_public_rooms())
+                if request.method == 'POST':
+                    payload = await _read_json_body(request)
+                    if payload is None:
+                        return json_response({'error': 'Invalid JSON body'}, status=400)
+                    body, status = _create_public_room(payload)
+                    return json_response(body, status=status)
+                return json_response({'error': 'Method not allowed'}, status=405)
 
-        # Handle GET requests for HTML pages
-        if request.method == 'GET' and path in PAGES_MAP:
-            html_path = Path(__file__).parent / 'pages' / PAGES_MAP[path]
-            html_content = html_path.read_text(encoding='utf-8')
-            return html_response(html_content)
+            # Handle GET requests for HTML pages
+            if request.method == 'GET' and path in PAGES_MAP:
+                html_path = Path(__file__).parent / 'pages' / PAGES_MAP[path]
+                html_content = html_path.read_text(encoding='utf-8')
+                return html_response(html_content)
 
-        # Serving static files from the 'public' directory
-        if hasattr(env, 'ASSETS'):
-            return await env.ASSETS.fetch(request)
+            # Serving static files from the 'public' directory
+            if hasattr(env, 'ASSETS'):
+                return await env.ASSETS.fetch(request)
 
-        return Response('Not Found', status=404)
+            return Response('Not Found', status=404)
+
+        except FileNotFoundError as exc:
+            print(f'[404] Page file not found: {exc}')
+            return Response('Not Found',
+                            status=404,
+                            headers=base_headers('text/plain; charset=utf-8'))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            traceback.print_exc()
+            return Response('Internal Server Error',
+                            status=500,
+                            headers=base_headers('text/plain; charset=utf-8'))
