@@ -15,6 +15,7 @@
   let micEnabled = false;
   let camEnabled = false;
   let noiseSuppressionEnabled = true;
+  let noiseSuppressionToggleAvailable = true;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -147,6 +148,16 @@
 
   function _trackSupportsNoiseSuppression(track) {
     if (!track) return false;
+    if (!noiseSuppressionToggleAvailable) return false;
+
+    const globalSupport =
+      navigator.mediaDevices && typeof navigator.mediaDevices.getSupportedConstraints === "function"
+        ? navigator.mediaDevices.getSupportedConstraints()
+        : null;
+    if (globalSupport && globalSupport.noiseSuppression === false) {
+      return false;
+    }
+
     const capabilities =
       typeof track.getCapabilities === "function" ? track.getCapabilities() : null;
     if (capabilities && Object.prototype.hasOwnProperty.call(capabilities, "noiseSuppression")) {
@@ -156,7 +167,8 @@
     if (settings && Object.prototype.hasOwnProperty.call(settings, "noiseSuppression")) {
       return true;
     }
-    return true;
+
+    return Boolean(globalSupport && globalSupport.noiseSuppression === true);
   }
 
   function _syncPreviewNoiseSuppressionUi() {
@@ -166,12 +178,14 @@
     const audioAvailable = Boolean(audioTrack);
     const supported = audioAvailable ? _trackSupportsNoiseSuppression(audioTrack) : false;
 
+    const effectiveEnabled = audioAvailable && supported ? noiseSuppressionEnabled : false;
+
     if (btn) {
       btn.disabled = !audioAvailable || !supported;
-      btn.classList.toggle("active", noiseSuppressionEnabled && audioAvailable && supported);
+      btn.classList.toggle("active", effectiveEnabled);
       btn.classList.toggle("opacity-50", !audioAvailable || !supported);
       btn.classList.toggle("cursor-not-allowed", !audioAvailable || !supported);
-      btn.setAttribute("aria-pressed", String(noiseSuppressionEnabled && audioAvailable && supported));
+      btn.setAttribute("aria-pressed", String(effectiveEnabled));
       btn.title = !audioAvailable
         ? "Microphone required for noise suppression"
         : supported
@@ -180,7 +194,7 @@
     }
 
     if (badge) {
-      const active = noiseSuppressionEnabled && audioAvailable && supported;
+      const active = effectiveEnabled;
       badge.classList.toggle("badge-success", active);
       badge.classList.toggle("badge-muted", !active);
       badge.textContent = `Noise Suppression ${active ? "On" : "Off"}`;
@@ -199,27 +213,72 @@
       return false;
     }
 
-    try {
-      await track.applyConstraints({
-        noiseSuppression: Boolean(enabled),
+    const requested = Boolean(enabled);
+    const attempts = [
+      {
+        noiseSuppression: requested,
         echoCancellation: true,
         autoGainControl: true,
-      });
-      noiseSuppressionEnabled = Boolean(enabled);
-      persistAudioPreferences();
-      _syncPreviewNoiseSuppressionUi();
-      return true;
-    } catch {
-      _syncPreviewNoiseSuppressionUi();
-      return false;
+      },
+      {
+        noiseSuppression: requested,
+      },
+    ];
+
+    for (const constraints of attempts) {
+      try {
+        await track.applyConstraints(constraints);
+        noiseSuppressionToggleAvailable = true;
+        noiseSuppressionEnabled = requested;
+        persistAudioPreferences();
+        _syncPreviewNoiseSuppressionUi();
+        return true;
+      } catch {
+        // Try the next, less strict constraint set.
+      }
     }
+
+    // Some browser/device combinations reject runtime applyConstraints but
+    // accept the same constraints during a fresh capture request.
+    try {
+      const wasEnabled = track.enabled;
+      const replacementStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: requested,
+          echoCancellation: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      const replacementTrack = replacementStream.getAudioTracks()[0];
+      if (replacementTrack) {
+        replacementTrack.enabled = wasEnabled;
+        previewStream.addTrack(replacementTrack);
+        previewStream.removeTrack(track);
+        track.stop();
+
+        initPreviewVoiceEngine();
+
+        noiseSuppressionToggleAvailable = true;
+        noiseSuppressionEnabled = requested;
+        persistAudioPreferences();
+        _syncPreviewNoiseSuppressionUi();
+        return true;
+      }
+    } catch {
+      // Fall through to unsupported handling.
+    }
+
+    noiseSuppressionToggleAvailable = false;
+    _syncPreviewNoiseSuppressionUi();
+    return false;
   }
 
   async function togglePreviewNoiseSuppression() {
     const next = !noiseSuppressionEnabled;
     const applied = await _applyPreviewNoiseSuppression(next);
     if (!applied) {
-      showToast("Noise suppression not supported on this device", "warning");
+      showToast("Noise suppression could not be fully applied on this browser", "warning");
       return;
     }
     showToast(`Noise suppression ${next ? "enabled" : "disabled"}`, "success");
@@ -669,10 +728,24 @@
   }
 
   async function initPreviewStream() {
+    const savedAudioPrefs = getStoredAudioPreferences();
+    if (
+      savedAudioPrefs &&
+      Object.prototype.hasOwnProperty.call(savedAudioPrefs, "noiseSuppressionEnabled")
+    ) {
+      noiseSuppressionEnabled = Boolean(savedAudioPrefs.noiseSuppressionEnabled);
+    }
+
+    const requestedAudioConstraints = {
+      noiseSuppression: noiseSuppressionEnabled,
+      echoCancellation: true,
+      autoGainControl: true,
+    };
+
     const constraints = [
-      { video: true, audio: true },
+      { video: true, audio: requestedAudioConstraints },
       { video: true, audio: false },
-      { video: false, audio: true },
+      { video: false, audio: requestedAudioConstraints },
     ];
 
     for (const mediaConstraints of constraints) {
@@ -682,14 +755,6 @@
         camEnabled = false;
         setTrackEnabled("audio", false);
         setTrackEnabled("video", false);
-
-        const savedAudioPrefs = getStoredAudioPreferences();
-        if (
-          savedAudioPrefs &&
-          Object.prototype.hasOwnProperty.call(savedAudioPrefs, "noiseSuppressionEnabled")
-        ) {
-          noiseSuppressionEnabled = Boolean(savedAudioPrefs.noiseSuppressionEnabled);
-        }
 
         await _applyPreviewNoiseSuppression(noiseSuppressionEnabled);
         updatePreviewUI();

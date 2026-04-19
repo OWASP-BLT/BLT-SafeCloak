@@ -28,6 +28,7 @@ const VideoChat = (() => {
   const SPEAKING_THRESHOLD = 28;
   const SPEAKING_HOLD_MS = 260;
   let noiseSuppressionEnabled = true;
+  let noiseSuppressionToggleAvailable = true;
 
   const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff }
   const remoteSpeakingMonitors = new Map(); // peerId -> { analyser, data, source, activeUntil }
@@ -635,6 +636,15 @@ const VideoChat = (() => {
 
   function _trackSupportsNoiseSuppression(track) {
     if (!track) return false;
+    if (!noiseSuppressionToggleAvailable) return false;
+
+    const globalSupport =
+      navigator.mediaDevices && typeof navigator.mediaDevices.getSupportedConstraints === "function"
+        ? navigator.mediaDevices.getSupportedConstraints()
+        : null;
+    if (globalSupport && globalSupport.noiseSuppression === false) {
+      return false;
+    }
 
     const capabilities =
       typeof track.getCapabilities === "function" ? track.getCapabilities() : null;
@@ -647,7 +657,7 @@ const VideoChat = (() => {
       return true;
     }
 
-    return true;
+    return Boolean(globalSupport && globalSupport.noiseSuppression === true);
   }
 
   function _syncNoiseSuppressionUi() {
@@ -656,7 +666,7 @@ const VideoChat = (() => {
     const audioTrack = localStream && localStream.getAudioTracks ? localStream.getAudioTracks()[0] : null;
     const audioAvailable = Boolean(audioTrack);
     const supported = audioAvailable ? _trackSupportsNoiseSuppression(audioTrack) : false;
-    const enabled = noiseSuppressionEnabled && audioAvailable && supported;
+    const enabled = audioAvailable && supported ? noiseSuppressionEnabled : false;
 
     if (btn) {
       btn.disabled = !audioAvailable || !supported;
@@ -682,12 +692,62 @@ const VideoChat = (() => {
     if (!track || typeof track.applyConstraints !== "function") {
       return false;
     }
-    try {
-      await track.applyConstraints({
-        noiseSuppression: Boolean(enabled),
+
+    const requested = Boolean(enabled);
+    const attempts = [
+      {
+        noiseSuppression: requested,
         echoCancellation: true,
         autoGainControl: true,
+      },
+      {
+        noiseSuppression: requested,
+      },
+    ];
+
+    for (const constraints of attempts) {
+      try {
+        await track.applyConstraints(constraints);
+        noiseSuppressionToggleAvailable = true;
+        return true;
+      } catch {
+        // Try the next, less strict constraint set.
+      }
+    }
+
+    noiseSuppressionToggleAvailable = false;
+    return false;
+  }
+
+  async function _reacquireLocalAudioTrackWithConstraints(enabled) {
+    if (!localStream) return false;
+
+    const currentTrack = localStream.getAudioTracks()[0];
+    const desiredTrackEnabled = currentTrack ? currentTrack.enabled : !micMuted;
+
+    try {
+      const replacementStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: Boolean(enabled),
+          echoCancellation: true,
+          autoGainControl: true,
+        },
+        video: false,
       });
+
+      const replacementTrack = replacementStream.getAudioTracks()[0];
+      if (!replacementTrack) return false;
+
+      replacementTrack.enabled = desiredTrackEnabled;
+
+      if (currentTrack) {
+        localStream.removeTrack(currentTrack);
+        currentTrack.stop();
+      }
+
+      localStream.addTrack(replacementTrack);
+      await updateTracksInCalls(replacementTrack, "audio");
+      startVoiceMeter(localStream);
       return true;
     } catch {
       return false;
@@ -883,7 +943,18 @@ const VideoChat = (() => {
         };
         if (!request.audio && !request.video) return true;
 
-        const stream = await navigator.mediaDevices.getUserMedia(request);
+        const mediaRequest = {
+          audio: request.audio
+            ? {
+                noiseSuppression: noiseSuppressionEnabled,
+                echoCancellation: true,
+                autoGainControl: true,
+              }
+            : false,
+          video: request.video,
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(mediaRequest);
 
         if (constraints.audio && stream.getAudioTracks().length > 0) {
           stream.getAudioTracks().forEach((t) => {
@@ -2037,7 +2108,12 @@ const VideoChat = (() => {
     }
 
     const next = !noiseSuppressionEnabled;
-    const applied = await _applyNoiseSuppressionToTrack(audioTrack, next);
+    let applied = await _applyNoiseSuppressionToTrack(audioTrack, next);
+
+    if (!applied) {
+      applied = await _reacquireLocalAudioTrackWithConstraints(next);
+    }
+
     if (!applied) {
       _syncNoiseSuppressionUi();
       showToast("Noise suppression not supported on this device", "warning");
@@ -2048,6 +2124,7 @@ const VideoChat = (() => {
     _persistAudioPreferences();
     await _refreshVoicePipeline(true);
     _syncNoiseSuppressionUi();
+
     showToast(`Noise suppression ${next ? "enabled" : "disabled"}`, "success");
   }
 
