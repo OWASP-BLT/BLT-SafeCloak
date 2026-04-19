@@ -235,7 +235,7 @@ class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
 class _AppHandler(http.server.BaseHTTPRequestHandler):
     """Minimal HTTP handler that serves app pages and public assets.
 
-    Two class-level attributes are populated by the ``base_url`` fixture
+    Two class-level attributes are populated by the ``app_server_url`` fixture
     before the server starts:
 
     * ``peerjs_port`` – port of the local PeerJS signaling server
@@ -323,7 +323,7 @@ def _patch_video_chat_html(data: bytes, peerjs_port: int) -> bytes:
     return html.encode("utf-8")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def peerjs_server():
     """Start a local PeerJS signaling server and yield its port number.
 
@@ -374,8 +374,8 @@ def peerjs_server():
             proc.kill()
 
 
-@pytest.fixture(scope="module")
-def base_url(peerjs_server):
+@pytest.fixture(scope="session")
+def app_server_url(peerjs_server):
     """Start a local HTTP server and return its base URL."""
     if not _PEERJS_MIN_JS.exists():
         raise FileNotFoundError(
@@ -444,7 +444,7 @@ _STREAM_CHECK_JS = """
 # ---------------------------------------------------------------------------
 
 
-def test_three_clients_connect_and_see_cameras(base_url):
+def test_three_clients_connect_and_see_cameras(app_server_url):
     """
     Three clients join the same room.  Assert each client can see the
     other two participants' camera streams (srcObject != null).
@@ -460,7 +460,7 @@ def test_three_clients_connect_and_see_cameras(base_url):
             p2 = ctx2.new_page()
             p3 = ctx3.new_page()
 
-            video_url = f"{base_url}/video-room"
+            video_url = f"{app_server_url}/video-room?mic=on&cam=on"
             for page in (p1, p2, p3):
                 page.goto(video_url)
 
@@ -515,6 +515,56 @@ def test_three_clients_connect_and_see_cameras(base_url):
                 assert page.evaluate(_STREAM_CHECK_JS), (
                     f"{name} should see live streams from both other participants"
                 )
+        finally:
+            browser.close()
+
+
+def test_room_url_persists_on_refresh_and_shared_link_joins_same_room(app_server_url):
+    """Host room ID should be written into URL, survive refresh, and be joinable via shared URL."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            host_ctx = _new_context(browser)
+            joiner_ctx = _new_context(browser)
+            host_page = host_ctx.new_page()
+            joiner_page = joiner_ctx.new_page()
+
+            host_page.goto(f"{app_server_url}/video-room?mic=on&cam=on")
+            host_room_id = _peer_id(host_page)
+
+            host_page.wait_for_function(
+                "() => {"
+                "  const id = document.getElementById('my-peer-id')?.textContent?.trim();"
+                "  const room = new URLSearchParams(window.location.search).get('room');"
+                "  return Boolean(id && room && id === room);"
+                "}",
+                timeout=TIMEOUT_MS,
+            )
+            assert f"room={host_room_id}" in host_page.url, "Host URL should include its room ID"
+
+            shared_url = host_page.url
+            host_page.reload()
+
+            refreshed_host_room_id = _peer_id(host_page)
+            assert refreshed_host_room_id == host_room_id, (
+                "Refreshing should keep host in the same room ID"
+            )
+            assert f"room={host_room_id}" in host_page.url, "Room ID should remain in URL after refresh"
+
+            joiner_page.goto(shared_url)
+            joiner_id = _peer_id(joiner_page)
+            assert joiner_id != host_room_id, "Joiner should get a unique peer ID"
+            _accept_consent(joiner_page)
+            _accept_consent(host_page)
+
+            host_page.wait_for_function(
+                "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
+            joiner_page.wait_for_function(
+                "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
         finally:
             browser.close()
 
@@ -627,14 +677,14 @@ _VOICE_CHANGER_IGNORE_UNKNOWN_MODE_JS = """
 
 
 @pytest.fixture(scope="module")
-def voice_changer_page(base_url):
+def voice_changer_page(app_server_url):
     """Open a single in-call page for VoiceChanger unit tests."""
     with sync_playwright() as pw:
         browser = pw.chromium.launch(args=_BROWSER_ARGS)
         try:
             ctx = _new_context(browser)
             page = ctx.new_page()
-            page.goto(f"{base_url}/video-room")
+            page.goto(f"{app_server_url}/video-room?mic=on&cam=on")
             # Wait for VoiceChanger to be defined (scripts loaded)
             page.wait_for_function("typeof VoiceChanger !== 'undefined'", timeout=TIMEOUT_MS)
             yield page
@@ -1065,6 +1115,48 @@ async () => {
 }
 """
 
+_VIDEO_CHAT_PERSISTS_VOICE_PREFS_JS = """
+() => {
+    if (typeof VideoChat === 'undefined') return {ok: false, error: 'VideoChat not defined'};
+    if (typeof VoiceChanger === 'undefined') return {ok: false, error: 'VoiceChanger not defined'};
+
+    const voicePrefsKey = 'blt-safecloak-voice-preferences';
+    sessionStorage.removeItem(voicePrefsKey);
+
+    VideoChat.setVoiceMode('normal');
+    const rawBaseline = sessionStorage.getItem(voicePrefsKey);
+    if (!rawBaseline) return {ok: false, error: 'Baseline voice preferences not stored after normal mode'};
+    const parsedBaseline = JSON.parse(rawBaseline);
+    const baselineLevels = parsedBaseline && parsedBaseline.effectLevels ? parsedBaseline.effectLevels : {};
+    const baselineActive = Object.values(baselineLevels).some((v) => Number(v) > 0);
+    if (baselineActive) {
+        return {ok: false, error: 'Baseline normal mode should persist with all effects disabled'};
+    }
+
+    VideoChat.toggleEffectMode('robot');
+
+    const rawOn = sessionStorage.getItem(voicePrefsKey);
+    if (!rawOn) return {ok: false, error: 'Voice preferences not stored after toggling effect'};
+    const parsedOn = JSON.parse(rawOn);
+    const robotLevel = Number(parsedOn?.effectLevels?.robot || 0);
+    if (!(robotLevel > 0)) {
+        return {ok: false, error: 'Robot level not persisted as active'};
+    }
+
+    VideoChat.setVoiceMode('normal');
+    const rawOff = sessionStorage.getItem(voicePrefsKey);
+    if (!rawOff) return {ok: false, error: 'Voice preferences missing after resetting to normal'};
+    const parsedOff = JSON.parse(rawOff);
+    const levels = parsedOff && parsedOff.effectLevels ? parsedOff.effectLevels : {};
+    const anyActive = Object.values(levels).some((v) => Number(v) > 0);
+    if (anyActive) {
+        return {ok: false, error: 'Normal mode should persist with all effects disabled'};
+    }
+
+    return {ok: true};
+}
+"""
+
 
 def test_voice_changer_combined_effects_api(voice_changer_page):
     """setEffectLevel/getEffectLevels/toggleEffect must support independent per-effect levels."""
@@ -1075,6 +1167,12 @@ def test_voice_changer_combined_effects_api(voice_changer_page):
 def test_voice_changer_all_effects_combined(voice_changer_page):
     """All 7 effects active simultaneously must not throw and keep the stream valid."""
     result = voice_changer_page.evaluate(_VOICE_CHANGER_ALL_EFFECTS_COMBINED_JS)
+    assert result["ok"], result.get("error", "unknown error")
+
+
+def test_voice_preferences_persistence_from_room_controls(voice_changer_page):
+    """In-room voice control changes should persist immediately for reload-safe UI state."""
+    result = voice_changer_page.evaluate(_VIDEO_CHAT_PERSISTS_VOICE_PREFS_JS)
     assert result["ok"], result.get("error", "unknown error")
 
 
@@ -1110,6 +1208,14 @@ def test_video_chat_includes_prejoin_voice_controller_ui():
     ]
     for snippet in required_snippets:
         assert snippet in html, f"Expected snippet missing in video-chat.html: {snippet}"
+
+
+def test_video_chat_lobby_hides_in_room_controls():
+    """Lobby page should not render in-room controls like room ID and participant actions."""
+    html = (ROOT / "src/pages/video-chat.html").read_text(encoding="utf-8")
+    assert 'id="my-peer-id"' not in html
+    assert "Copy Room ID" not in html
+    assert "Add Participant" not in html
 
 
 def test_video_room_peerjs_script_has_no_sri_integrity():
