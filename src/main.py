@@ -27,6 +27,7 @@ PUBLIC_ROOM_TTL_HOURS = 4
 PUBLIC_ROOM_MAX_COUNT = 100
 PUBLIC_ROOM_ID_MAX_RETRIES = 20
 
+# Best-effort ephemeral in-memory listing (per isolate, non-durable).
 PUBLIC_ROOMS = []
 
 

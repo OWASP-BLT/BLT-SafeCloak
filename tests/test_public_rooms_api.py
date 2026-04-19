@@ -56,7 +56,7 @@ def _call(request):
     return asyncio.run(app.on_fetch(request, MagicMock()))
 
 
-def setup_function():
+def setup_function(function):  # pylint: disable=unused-argument
     main.PUBLIC_ROOMS.clear()
 
 
@@ -141,3 +141,16 @@ def test_create_public_room_requires_name_and_topic():
     missing_topic_payload = _decode_json_response(missing_topic)
     assert missing_topic.status_code == 400
     assert missing_topic_payload['error'] == 'topic is required'
+
+
+def test_create_public_room_rejects_invalid_json_body():
+    invalid_json = _call(
+        FakeRequest(
+            'POST',
+            'https://example.com/api/public-rooms',
+            '{"roomName": "Room", "topic": "Topic"',
+        ))
+    payload = _decode_json_response(invalid_json)
+
+    assert invalid_json.status_code == 400
+    assert payload['error'] == 'Invalid JSON body'

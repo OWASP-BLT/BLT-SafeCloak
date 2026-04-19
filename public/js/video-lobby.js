@@ -745,6 +745,15 @@
     }
   }
 
+  async function createRoomFromLobby(displayName, publicRoomCheckbox) {
+    const shouldListPublicly = Boolean(publicRoomCheckbox && publicRoomCheckbox.checked);
+    if (shouldListPublicly) {
+      await createPublicRoomAndJoin(displayName);
+      return;
+    }
+    goToRoom("", displayName);
+  }
+
   document.addEventListener("DOMContentLoaded", async () => {
     const createBtn = $("btn-create-room");
     const joinBtn = $("btn-join-room");
@@ -762,12 +771,7 @@
       createBtn.addEventListener("click", async () => {
         const displayName = getValidatedDisplayName();
         if (!displayName) return;
-        const shouldListPublicly = Boolean(publicRoomCheckbox && publicRoomCheckbox.checked);
-        if (shouldListPublicly) {
-          await createPublicRoomAndJoin(displayName);
-          return;
-        }
-        goToRoom("", displayName);
+        await createRoomFromLobby(displayName, publicRoomCheckbox);
       });
     }
 
@@ -794,7 +798,7 @@
     }
 
     if (displayNameInput) {
-      displayNameInput.addEventListener("keydown", (event) => {
+      displayNameInput.addEventListener("keydown", async (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
           const hasRoom = normalizeRoomId(roomInput ? roomInput.value : "");
@@ -804,7 +808,7 @@
           }
           const displayName = getValidatedDisplayName();
           if (!displayName) return;
-          goToRoom("", displayName);
+          await createRoomFromLobby(displayName, publicRoomCheckbox);
         }
       });
     }
