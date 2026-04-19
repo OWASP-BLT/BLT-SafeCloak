@@ -18,10 +18,12 @@ const VideoChat = (() => {
   let screenSharing = false;
   let initialMediaPreferences = { mic: true, cam: true };
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
+  const AUDIO_PREFS_STORAGE_KEY = "blt-safecloak-audio-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const PROFILE_BROADCAST_THROTTLE_MS = 220;
   const SPEAKING_THRESHOLD = 28;
   const SPEAKING_HOLD_MS = 260;
+  let noiseSuppressionEnabled = true;
 
   const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff }
   const remoteSpeakingMonitors = new Map(); // peerId -> { analyser, data, source, activeUntil }
@@ -535,6 +537,159 @@ const VideoChat = (() => {
     if (retryBtn) retryBtn.addEventListener("click", () => location.reload());
   }
 
+  function _readStoredAudioPreferences() {
+    try {
+      const raw = window.sessionStorage.getItem(AUDIO_PREFS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function _persistAudioPreferences() {
+    try {
+      window.sessionStorage.setItem(
+        AUDIO_PREFS_STORAGE_KEY,
+        JSON.stringify({ noiseSuppressionEnabled })
+      );
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function _trackSupportsNoiseSuppression(track) {
+    if (!track) return false;
+
+    const capabilities =
+      typeof track.getCapabilities === "function" ? track.getCapabilities() : null;
+    if (capabilities && Object.prototype.hasOwnProperty.call(capabilities, "noiseSuppression")) {
+      return true;
+    }
+
+    const settings = typeof track.getSettings === "function" ? track.getSettings() : null;
+    if (settings && Object.prototype.hasOwnProperty.call(settings, "noiseSuppression")) {
+      return true;
+    }
+
+    return true;
+  }
+
+  function _syncNoiseSuppressionUi() {
+    const btn = $("btn-noise");
+    const badge = $("badge-noise-suppression");
+    const audioTrack = localStream && localStream.getAudioTracks ? localStream.getAudioTracks()[0] : null;
+    const audioAvailable = Boolean(audioTrack);
+    const supported = audioAvailable ? _trackSupportsNoiseSuppression(audioTrack) : false;
+    const enabled = noiseSuppressionEnabled && audioAvailable && supported;
+
+    if (btn) {
+      btn.disabled = !audioAvailable || !supported;
+      btn.classList.toggle("active", enabled);
+      btn.classList.toggle("opacity-50", !audioAvailable || !supported);
+      btn.classList.toggle("cursor-not-allowed", !audioAvailable || !supported);
+      btn.setAttribute("aria-pressed", String(enabled));
+      btn.title = !audioAvailable
+        ? "Microphone not available"
+        : supported
+          ? "Toggle noise suppression"
+          : "Noise suppression not supported on this device";
+    }
+
+    if (badge) {
+      badge.classList.toggle("badge-success", enabled);
+      badge.classList.toggle("badge-muted", !enabled);
+      badge.textContent = `Noise Suppression ${enabled ? "On" : "Off"}`;
+    }
+  }
+
+  async function _applyNoiseSuppressionToTrack(track, enabled) {
+    if (!track || typeof track.applyConstraints !== "function") {
+      return false;
+    }
+    try {
+      await track.applyConstraints({
+        noiseSuppression: Boolean(enabled),
+        echoCancellation: true,
+        autoGainControl: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function _applyNoiseSuppressionToLocalAudioTracks() {
+    const tracks = localStream && localStream.getAudioTracks ? localStream.getAudioTracks() : [];
+    if (!tracks.length) {
+      _syncNoiseSuppressionUi();
+      return false;
+    }
+
+    let applied = false;
+    for (const track of tracks) {
+      const ok = await _applyNoiseSuppressionToTrack(track, noiseSuppressionEnabled);
+      applied = applied || ok;
+    }
+
+    _syncNoiseSuppressionUi();
+    return applied;
+  }
+
+  async function _refreshVoicePipeline(syncCalls = true) {
+    if (!localStream) return;
+
+    const audioTrack = localStream.getAudioTracks()[0];
+    const videoTrack = localStream.getVideoTracks()[0];
+
+    if (typeof VoiceChanger === "undefined") {
+      voiceStream = localStream;
+      _syncNoiseSuppressionUi();
+      return;
+    }
+
+    if (!audioTrack) {
+      VoiceChanger.destroy();
+      voiceStream = videoTrack ? new MediaStream([videoTrack]) : localStream;
+      _syncNoiseSuppressionUi();
+      if (syncCalls) {
+        await updateTracksInCalls(null, "audio");
+      }
+      return;
+    }
+
+    const previousEffectLevels = VoiceChanger.getEffectLevels();
+    const previousMonitorEnabled = VoiceChanger.getMonitorEnabled();
+    const previousMonitorVolume = VoiceChanger.getMonitorVolume();
+    const previousMicGain = VoiceChanger.getMicGain();
+
+    VoiceChanger.init(localStream);
+
+    Object.entries(previousEffectLevels).forEach(([mode, level]) => {
+      VoiceChanger.setEffectLevel(mode, level);
+    });
+    VoiceChanger.setMonitorVolume(previousMonitorVolume);
+    VoiceChanger.setMicGain(previousMicGain);
+    if (previousMonitorEnabled && !VoiceChanger.getMonitorEnabled()) {
+      VoiceChanger.toggleMonitor();
+    }
+
+    await _applyNoiseSuppressionToLocalAudioTracks();
+
+    const processedStream = VoiceChanger.getProcessedStream();
+    const processedAudioTrack =
+      processedStream && processedStream.getAudioTracks().length > 0
+        ? processedStream.getAudioTracks()[0]
+        : audioTrack;
+
+    voiceStream = new MediaStream([videoTrack, processedAudioTrack].filter(Boolean));
+
+    if (syncCalls) {
+      await updateTracksInCalls(processedAudioTrack, "audio");
+    }
+  }
+
   /* ── Media ── */
   async function attachStream(stream) {
     const localVideo = $("local-video");
@@ -543,16 +698,9 @@ const VideoChat = (() => {
       localVideo.muted = true;
     }
 
-    /* Build a separate stream for WebRTC: original video + voice-changed audio */
-    if (typeof VoiceChanger !== "undefined") {
-      const processedAudio = VoiceChanger.init(stream);
-      const videoTrack = stream.getVideoTracks()[0];
-      const audioTrack = processedAudio.getAudioTracks()[0];
-      const tracks = [videoTrack, audioTrack].filter(Boolean);
-      voiceStream = tracks.length ? new MediaStream(tracks) : stream;
-    } else {
-      voiceStream = stream;
-    }
+    voiceStream = stream;
+
+    await _refreshVoicePipeline(false);
 
     startVoiceMeter(stream);
     updateLocalTilePresentation();
@@ -600,6 +748,8 @@ const VideoChat = (() => {
       camBtn.setAttribute("aria-pressed", camOff ? "true" : "false");
       camBtn.classList.toggle("active", camOff);
     }
+
+    _syncNoiseSuppressionUi();
   }
 
   function applyInitialMediaPreferences() {
@@ -650,7 +800,6 @@ const VideoChat = (() => {
           stream.getAudioTracks().forEach((t) => {
             t.enabled = !micMuted;
             ls.addTrack(t);
-            updateTracksInCalls(t, "audio");
           });
           startVoiceMeter(ls);
         }
@@ -663,6 +812,9 @@ const VideoChat = (() => {
             if (localVideo) localVideo.srcObject = ls;
           });
         }
+
+        await _refreshVoicePipeline(request.audio);
+        _syncNoiseSuppressionUi();
         return true;
       } catch (err) {
         if (
@@ -1165,7 +1317,7 @@ const VideoChat = (() => {
           t.stop();
           localStream.removeTrack(t);
         });
-        await updateTracksInCalls(null, "audio");
+        await _refreshVoicePipeline(true);
       } else {
         // Turning ON
         const ok = await startLocalMedia({ audio: true, video: false });
@@ -1616,23 +1768,30 @@ const VideoChat = (() => {
 
   /* ── Noise suppression hint ── */
   async function toggleNoiseSuppression() {
-    if (!localStream) return;
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (!audioTrack) return;
-    try {
-      const settings = audioTrack.getSettings();
-      const current = settings.noiseSuppression;
-      await audioTrack.applyConstraints({
-        noiseSuppression: !current,
-        echoCancellation: true,
-        autoGainControl: true,
-      });
-      showToast(`Noise suppression ${!current ? "enabled" : "disabled"}`, "success");
-      const btn = $("btn-noise");
-      if (btn) btn.classList.toggle("active", !current);
-    } catch {
-      showToast("Noise suppression not supported on this device", "warning");
+    if (!localStream) {
+      showToast("Microphone not available", "warning");
+      return;
     }
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      _syncNoiseSuppressionUi();
+      showToast("Microphone not available", "warning");
+      return;
+    }
+
+    const next = !noiseSuppressionEnabled;
+    const applied = await _applyNoiseSuppressionToTrack(audioTrack, next);
+    if (!applied) {
+      _syncNoiseSuppressionUi();
+      showToast("Noise suppression not supported on this device", "warning");
+      return;
+    }
+
+    noiseSuppressionEnabled = next;
+    _persistAudioPreferences();
+    await _refreshVoicePipeline(true);
+    _syncNoiseSuppressionUi();
+    showToast(`Noise suppression ${next ? "enabled" : "disabled"}`, "success");
   }
 
   /* ── Consent gate ── */
@@ -1749,6 +1908,7 @@ const VideoChat = (() => {
     const params = new URLSearchParams(window.location.search);
     const mic = params.get("mic");
     const cam = params.get("cam");
+    const ns = params.get("ns");
 
     if (mic === "off" || mic === "on") {
       initialMediaPreferences.mic = mic === "on";
@@ -1756,11 +1916,23 @@ const VideoChat = (() => {
     if (cam === "off" || cam === "on") {
       initialMediaPreferences.cam = cam === "on";
     }
+    if (ns === "off" || ns === "on") {
+      noiseSuppressionEnabled = ns === "on";
+    }
+
+    const storedAudioPrefs = _readStoredAudioPreferences();
+    if (
+      storedAudioPrefs &&
+      Object.prototype.hasOwnProperty.call(storedAudioPrefs, "noiseSuppressionEnabled")
+    ) {
+      noiseSuppressionEnabled = Boolean(storedAudioPrefs.noiseSuppressionEnabled);
+    }
 
     if (params.get("prejoin") === "1") {
       params.delete("prejoin");
       params.delete("mic");
       params.delete("cam");
+      params.delete("ns");
       params.delete("name");
       const query = params.toString();
       const cleanUrl = window.location.pathname + (query ? "?" + query : "");
@@ -1773,6 +1945,7 @@ const VideoChat = (() => {
     state.displayInitials = makeInitials(state.displayName);
 
     readInitialMediaPreferencesFromUrl();
+    _syncNoiseSuppressionUi();
     updateLocalTilePresentation();
     
     // We try to start media immediately if we have preferences from the lobby

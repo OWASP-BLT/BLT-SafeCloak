@@ -6,12 +6,14 @@
 (() => {
   const ROOM_ID_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
+  const AUDIO_PREFS_STORAGE_KEY = "blt-safecloak-audio-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const LOBBY_EFFECT_ORDER = ["deep", "chipmunk", "robot", "echo", "voice1", "voice2", "voice3"];
 
   let previewStream = null;
   let micEnabled = true;
   let camEnabled = true;
+  let noiseSuppressionEnabled = true;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -120,6 +122,108 @@
     }
   }
 
+  function getStoredAudioPreferences() {
+    try {
+      const raw = window.sessionStorage.getItem(AUDIO_PREFS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function persistAudioPreferences() {
+    try {
+      window.sessionStorage.setItem(
+        AUDIO_PREFS_STORAGE_KEY,
+        JSON.stringify({ noiseSuppressionEnabled })
+      );
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function _trackSupportsNoiseSuppression(track) {
+    if (!track) return false;
+    const capabilities =
+      typeof track.getCapabilities === "function" ? track.getCapabilities() : null;
+    if (capabilities && Object.prototype.hasOwnProperty.call(capabilities, "noiseSuppression")) {
+      return true;
+    }
+    const settings = typeof track.getSettings === "function" ? track.getSettings() : null;
+    if (settings && Object.prototype.hasOwnProperty.call(settings, "noiseSuppression")) {
+      return true;
+    }
+    return true;
+  }
+
+  function _syncPreviewNoiseSuppressionUi() {
+    const btn = $("btn-preview-noise");
+    const badge = $("badge-preview-noise-suppression");
+    const audioTrack = hasAudioTrack() ? previewStream.getAudioTracks()[0] : null;
+    const audioAvailable = Boolean(audioTrack);
+    const supported = audioAvailable ? _trackSupportsNoiseSuppression(audioTrack) : false;
+
+    if (btn) {
+      btn.disabled = !audioAvailable || !supported;
+      btn.classList.toggle("active", noiseSuppressionEnabled && audioAvailable && supported);
+      btn.classList.toggle("opacity-50", !audioAvailable || !supported);
+      btn.classList.toggle("cursor-not-allowed", !audioAvailable || !supported);
+      btn.setAttribute("aria-pressed", String(noiseSuppressionEnabled && audioAvailable && supported));
+      btn.title = !audioAvailable
+        ? "Microphone required for noise suppression"
+        : supported
+          ? "Toggle noise suppression"
+          : "Noise suppression not supported on this device";
+    }
+
+    if (badge) {
+      const active = noiseSuppressionEnabled && audioAvailable && supported;
+      badge.classList.toggle("badge-success", active);
+      badge.classList.toggle("badge-muted", !active);
+      badge.textContent = `Noise Suppression ${active ? "On" : "Off"}`;
+    }
+  }
+
+  async function _applyPreviewNoiseSuppression(enabled) {
+    if (!hasAudioTrack()) {
+      _syncPreviewNoiseSuppressionUi();
+      return false;
+    }
+
+    const track = previewStream.getAudioTracks()[0];
+    if (!track || typeof track.applyConstraints !== "function") {
+      _syncPreviewNoiseSuppressionUi();
+      return false;
+    }
+
+    try {
+      await track.applyConstraints({
+        noiseSuppression: Boolean(enabled),
+        echoCancellation: true,
+        autoGainControl: true,
+      });
+      noiseSuppressionEnabled = Boolean(enabled);
+      persistAudioPreferences();
+      _syncPreviewNoiseSuppressionUi();
+      return true;
+    } catch {
+      _syncPreviewNoiseSuppressionUi();
+      return false;
+    }
+  }
+
+  async function togglePreviewNoiseSuppression() {
+    const next = !noiseSuppressionEnabled;
+    const applied = await _applyPreviewNoiseSuppression(next);
+    if (!applied) {
+      showToast("Noise suppression not supported on this device", "warning");
+      return;
+    }
+    showToast(`Noise suppression ${next ? "enabled" : "disabled"}`, "success");
+  }
+
   function _syncPreviewNormalChip() {
     if (typeof VoiceChanger === "undefined") return;
 
@@ -224,6 +328,8 @@
       slider.classList.toggle("opacity-50", !audioAvailable);
       slider.classList.toggle("cursor-not-allowed", !audioAvailable);
     });
+
+    _syncPreviewNoiseSuppressionUi();
   }
 
   function _syncPreviewVoiceSliders() {
@@ -430,6 +536,17 @@
       });
     }
 
+    const noiseBtn = $("btn-preview-noise");
+    if (noiseBtn) {
+      noiseBtn.addEventListener("click", async () => {
+        if (!hasAudioTrack()) {
+          showToast("Microphone required for noise suppression", "warning");
+          return;
+        }
+        await togglePreviewNoiseSuppression();
+      });
+    }
+
     const monitorSlider = $("slider-preview-monitor-volume");
     const monitorLabel = $("label-preview-monitor-volume");
     if (monitorSlider && monitorLabel) {
@@ -538,6 +655,7 @@
     }
 
     _syncPreviewVoiceAvailability();
+    _syncPreviewNoiseSuppressionUi();
   }
 
   function setTrackEnabled(kind, enabled) {
@@ -561,6 +679,16 @@
         previewStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         micEnabled = hasAudioTrack();
         camEnabled = hasVideoTrack();
+
+        const savedAudioPrefs = getStoredAudioPreferences();
+        if (
+          savedAudioPrefs &&
+          Object.prototype.hasOwnProperty.call(savedAudioPrefs, "noiseSuppressionEnabled")
+        ) {
+          noiseSuppressionEnabled = Boolean(savedAudioPrefs.noiseSuppressionEnabled);
+        }
+
+        await _applyPreviewNoiseSuppression(noiseSuppressionEnabled);
         updatePreviewUI();
         initPreviewVoiceEngine();
         return;
@@ -588,6 +716,7 @@
     target.searchParams.set("prejoin", "1");
     target.searchParams.set("mic", micPref);
     target.searchParams.set("cam", camPref);
+    target.searchParams.set("ns", noiseSuppressionEnabled ? "on" : "off");
     return target;
   }
 
@@ -599,6 +728,7 @@
         /* ignore storage failures */
       }
     }
+    persistAudioPreferences();
     persistVoicePreferences();
     const target = buildRoomUrl(roomId);
     stopPreviewStream();
