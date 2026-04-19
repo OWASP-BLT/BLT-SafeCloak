@@ -714,8 +714,6 @@ const VideoChat = (() => {
         // Try the next, less strict constraint set.
       }
     }
-
-    noiseSuppressionToggleAvailable = false;
     return false;
   }
 
@@ -2109,12 +2107,15 @@ const VideoChat = (() => {
 
     const next = !noiseSuppressionEnabled;
     let applied = await _applyNoiseSuppressionToTrack(audioTrack, next);
+    let usedCaptureFallback = false;
 
     if (!applied) {
       applied = await _reacquireLocalAudioTrackWithConstraints(next);
+      usedCaptureFallback = applied;
     }
 
     if (!applied) {
+      noiseSuppressionToggleAvailable = false;
       _syncNoiseSuppressionUi();
       showToast("Noise suppression not supported on this device", "warning");
       return;
@@ -2122,6 +2123,9 @@ const VideoChat = (() => {
 
     noiseSuppressionEnabled = next;
     _persistAudioPreferences();
+    if (usedCaptureFallback) {
+      noiseSuppressionToggleAvailable = true;
+    }
     await _refreshVoicePipeline(true);
     _syncNoiseSuppressionUi();
 
@@ -2268,12 +2272,15 @@ const VideoChat = (() => {
       noiseSuppressionEnabled = ns === "on";
     }
 
-    const storedAudioPrefs = _readStoredAudioPreferences();
-    if (
-      storedAudioPrefs &&
-      Object.prototype.hasOwnProperty.call(storedAudioPrefs, "noiseSuppressionEnabled")
-    ) {
-      noiseSuppressionEnabled = Boolean(storedAudioPrefs.noiseSuppressionEnabled);
+    const hasExplicitNsParam = ns === "off" || ns === "on";
+    if (!hasExplicitNsParam) {
+      const storedAudioPrefs = _readStoredAudioPreferences();
+      if (
+        storedAudioPrefs &&
+        Object.prototype.hasOwnProperty.call(storedAudioPrefs, "noiseSuppressionEnabled")
+      ) {
+        noiseSuppressionEnabled = Boolean(storedAudioPrefs.noiseSuppressionEnabled);
+      }
     }
 
     if (hasUrlPrefs) {

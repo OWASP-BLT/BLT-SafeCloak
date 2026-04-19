@@ -208,7 +208,7 @@
     }
 
     const track = previewStream.getAudioTracks()[0];
-    if (!track || typeof track.applyConstraints !== "function") {
+    if (!track) {
       _syncPreviewNoiseSuppressionUi();
       return false;
     }
@@ -225,17 +225,21 @@
       },
     ];
 
-    for (const constraints of attempts) {
-      try {
-        await track.applyConstraints(constraints);
-        noiseSuppressionToggleAvailable = true;
-        noiseSuppressionEnabled = requested;
-        persistAudioPreferences();
-        _syncPreviewNoiseSuppressionUi();
-        return true;
-      } catch {
-        // Try the next, less strict constraint set.
+    if (typeof track.applyConstraints === "function") {
+      for (const constraints of attempts) {
+        try {
+          await track.applyConstraints(constraints);
+          noiseSuppressionToggleAvailable = true;
+          noiseSuppressionEnabled = requested;
+          persistAudioPreferences();
+          _syncPreviewNoiseSuppressionUi();
+          return true;
+        } catch {
+          // Try the next, less strict constraint set.
+        }
       }
+    } else {
+      _syncPreviewNoiseSuppressionUi();
     }
 
     // Some browser/device combinations reject runtime applyConstraints but
