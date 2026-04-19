@@ -7,6 +7,7 @@
   const ROOM_ID_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
+  const PUBLIC_ROOMS_API_PATH = "/api/public-rooms";
   const MEDIA_PREFS_STORAGE_KEY = "blt-safecloak-media-preferences";
   const LOBBY_EFFECT_ORDER = ["deep", "chipmunk", "robot", "echo", "voice1", "voice2", "voice3"];
 
@@ -23,6 +24,14 @@
 
   function normalizeDisplayName(value) {
     return (value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  }
+
+  function normalizePublicRoomName(value) {
+    return (value || "").trim().replace(/\s+/g, " ").slice(0, 60);
+  }
+
+  function normalizePublicRoomTopic(value) {
+    return (value || "").trim().replace(/\s+/g, " ").slice(0, 120);
   }
 
   function isValidRoomId(value) {
@@ -282,7 +291,8 @@
       return;
     }
 
-    const levels = saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
+    const levels =
+      saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
     LOBBY_EFFECT_ORDER.forEach((mode) => {
       const raw = Number(levels[mode]);
       const value = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
@@ -660,14 +670,88 @@
     }
 
     if (!isValidRoomId(roomId)) {
-      showToast(
-        "Room ID must be 6 characters: A-Z (except I,O) and digits 2-9",
-        "error"
-      );
+      showToast("Room ID must be 6 characters: A-Z (except I,O) and digits 2-9", "error");
       return;
     }
 
     goToRoom(roomId, displayName);
+  }
+
+  async function createPublicRoomAndJoin(displayName) {
+    const nameInput = $("public-room-name-input");
+    const topicInput = $("public-room-topic-input");
+    const createBtn = $("btn-create-room");
+
+    const roomName = normalizePublicRoomName(nameInput ? nameInput.value : "");
+    const topic = normalizePublicRoomTopic(topicInput ? topicInput.value : "");
+
+    if (nameInput) nameInput.value = roomName;
+    if (topicInput) topicInput.value = topic;
+
+    if (!roomName) {
+      showToast("Enter a public room name", "warning");
+      if (nameInput) nameInput.focus();
+      return;
+    }
+
+    if (!topic) {
+      showToast("Enter a topic for your public room", "warning");
+      if (topicInput) topicInput.focus();
+      return;
+    }
+
+    if (createBtn) createBtn.disabled = true;
+
+    try {
+      const response = await fetch(PUBLIC_ROOMS_API_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomName,
+          topic,
+          hostName: displayName,
+        }),
+      });
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        // Some failure responses may not include JSON; fallback message is handled below.
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const message =
+          payload && typeof payload.error === "string"
+            ? payload.error
+            : "Unable to create public room right now";
+        showToast(message, "error");
+        return;
+      }
+
+      const roomId = normalizeRoomId(payload && payload.room ? payload.room.id : "");
+      if (!isValidRoomId(roomId)) {
+        showToast("Public room creation returned an invalid room ID", "error");
+        return;
+      }
+
+      showToast("Public room created and listed on the homepage", "success");
+      goToRoom(roomId, displayName);
+    } catch {
+      showToast("Could not create public room. Please try again.", "error");
+    } finally {
+      if (createBtn) createBtn.disabled = false;
+    }
+  }
+
+  async function createRoomFromLobby(displayName, publicRoomCheckbox) {
+    const shouldListPublicly = Boolean(publicRoomCheckbox && publicRoomCheckbox.checked);
+    if (shouldListPublicly) {
+      await createPublicRoomAndJoin(displayName);
+      return;
+    }
+    goToRoom("", displayName);
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
@@ -677,16 +761,17 @@
     const displayNameInput = getDisplayNameInput();
     const micBtn = $("btn-preview-mic");
     const camBtn = $("btn-preview-cam");
+    const publicRoomCheckbox = $("public-room-checkbox");
     let shouldAutoJoinFromInvite = false;
 
     bindPreviewVoiceControls();
     restoreDisplayNameFromStorage();
 
     if (createBtn) {
-      createBtn.addEventListener("click", () => {
+      createBtn.addEventListener("click", async () => {
         const displayName = getValidatedDisplayName();
         if (!displayName) return;
-        goToRoom("", displayName);
+        await createRoomFromLobby(displayName, publicRoomCheckbox);
       });
     }
 
@@ -713,7 +798,7 @@
     }
 
     if (displayNameInput) {
-      displayNameInput.addEventListener("keydown", (event) => {
+      displayNameInput.addEventListener("keydown", async (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
           const hasRoom = normalizeRoomId(roomInput ? roomInput.value : "");
@@ -723,7 +808,7 @@
           }
           const displayName = getValidatedDisplayName();
           if (!displayName) return;
-          goToRoom("", displayName);
+          await createRoomFromLobby(displayName, publicRoomCheckbox);
         }
       });
     }
