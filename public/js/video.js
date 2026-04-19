@@ -2082,12 +2082,9 @@ const VideoChat = (() => {
     }
     $("btn-screen") && $("btn-screen").classList.remove("active");
     screenSharing = false;
-<<<<<<< HEAD
     updateLocalTilePresentation();
     broadcastProfile(true);
-=======
     applyLocalPreviewMirror();
->>>>>>> 5b03e4d (mirror effect)
     showToast("Screen sharing stopped", "info");
   }
 
@@ -2148,14 +2145,10 @@ const VideoChat = (() => {
   }
 
   async function init() {
-<<<<<<< HEAD
     state.displayName = resolveDisplayName();
     state.displayInitials = makeInitials(state.displayName);
-
-=======
     mirrorEnabled = getStoredMirrorPreference();
     syncMirrorButton();
->>>>>>> 5b03e4d (mirror effect)
     readInitialMediaPreferencesFromUrl();
     applyInitialMediaPreferences();
     updateLocalTilePresentation();

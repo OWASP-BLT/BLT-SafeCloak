@@ -753,13 +753,10 @@
     const displayNameInput = getDisplayNameInput();
     const micBtn = $("btn-preview-mic");
     const camBtn = $("btn-preview-cam");
-<<<<<<< HEAD
-    let shouldAutoJoinFromInvite = false;
-=======
     const mirrorBtn = $("btn-preview-mirror");
+    let shouldAutoJoinFromInvite = false;
 
     mirrorEnabled = getStoredMirrorPreference();
->>>>>>> 5b03e4d (mirror effect)
 
     bindPreviewVoiceControls();
     restoreDisplayNameFromStorage();
