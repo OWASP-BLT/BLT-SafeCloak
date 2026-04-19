@@ -451,6 +451,26 @@
           </button>
           <button
             class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            id="btn-mirror"
+            title="Disable mirror preview"
+            onclick="VideoChat.toggleMirrorPreview()"
+            aria-label="Toggle mirror preview"
+            aria-pressed="true"
+          >
+            <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+          </button>
+          <button
+            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            id="btn-mirror"
+            title="Disable mirror preview"
+            onclick="VideoChat.toggleMirrorPreview()"
+            aria-label="Toggle mirror preview"
+            aria-pressed="true"
+          >
+            <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+          </button>
+          <button
+            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
             id="btn-noise"
             title="Toggle noise suppression"
             onclick="VideoChat.toggleNoiseSuppression()"
@@ -501,6 +521,7 @@
     <script src="js/ui.js"></script>
     <script src="js/consent.js"></script>
     <script src="js/voice-changer.js"></script>
+    <script src="js/video-preview.js"></script>
     <script src="js/video.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async () => {
