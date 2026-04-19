@@ -110,7 +110,9 @@ const VideoChat = (() => {
     }
 
     try {
-      const fromStorage = normalizeDisplayName(window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY));
+      const fromStorage = normalizeDisplayName(
+        window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY)
+      );
       if (fromStorage) return fromStorage;
     } catch {
       /* ignore storage failures */
@@ -205,7 +207,8 @@ const VideoChat = (() => {
       stateCam:
         wrapper.querySelector('[data-state="cam"]') || (isLocal ? $("state-icon-local-cam") : null),
       labelName:
-        wrapper.querySelector('[data-role="label-name"]') || (isLocal ? $("label-local-name") : null),
+        wrapper.querySelector('[data-role="label-name"]') ||
+        (isLocal ? $("label-local-name") : null),
     };
   }
 
@@ -333,7 +336,10 @@ const VideoChat = (() => {
       tile.labelName.title = displayName;
     }
     if (tile.video) {
-      tile.video.setAttribute("aria-label", isLocal ? "Your video" : `Participant ${displayName} video`);
+      tile.video.setAttribute(
+        "aria-label",
+        isLocal ? "Your video" : `Participant ${displayName} video`
+      );
     }
     if (tile.avatarInitials) {
       tile.avatarInitials.textContent = initials;
@@ -378,7 +384,9 @@ const VideoChat = (() => {
   }
 
   function stopAllRemoteSpeakingMonitors() {
-    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) => stopRemoteSpeakingMonitor(peerId));
+    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) =>
+      stopRemoteSpeakingMonitor(peerId)
+    );
     if (speakingLoopFrame) {
       cancelAnimationFrame(speakingLoopFrame);
       speakingLoopFrame = null;
@@ -461,8 +469,11 @@ const VideoChat = (() => {
       name: normalizedName || prev.name,
       initials: makeInitials(normalizedName || prev.name),
       micMuted:
-        payload && typeof payload.micMuted === "boolean" ? payload.micMuted : Boolean(prev.micMuted),
-      camOff: payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
+        payload && typeof payload.micMuted === "boolean"
+          ? payload.micMuted
+          : Boolean(prev.micMuted),
+      camOff:
+        payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
     };
 
     peerProfiles.set(peerId, profile);
@@ -602,9 +613,9 @@ const VideoChat = (() => {
       const micUnavailable = !hasAudioTrack && !micMuted;
       if (micUnavailable) {
         micBtn.innerHTML = '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>';
-        micBtn.title = micMuted ? "Unmute mic" : "Mute mic";
-        micBtn.disabled = false;
-        micBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        micBtn.title = "Microphone unavailable";
+        micBtn.disabled = true;
+        micBtn.classList.add("opacity-50", "cursor-not-allowed");
       } else {
         micBtn.innerHTML = micMuted
           ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>'
@@ -623,9 +634,9 @@ const VideoChat = (() => {
       const camUnavailable = !hasVideoTrack && !camOff;
       if (camUnavailable) {
         camBtn.innerHTML = '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>';
-        camBtn.title = camOff ? "Enable camera" : "Disable camera";
-        camBtn.disabled = false;
-        camBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        camBtn.title = "Camera unavailable";
+        camBtn.disabled = true;
+        camBtn.classList.add("opacity-50", "cursor-not-allowed");
       } else {
         camBtn.innerHTML = camOff
           ? '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>'
@@ -853,7 +864,7 @@ const VideoChat = (() => {
 
       activeCalls.set(incomingCall.peer, incomingCall);
       updateParticipantsList();
-      
+
       incomingCall.answer(voiceStream || localStream);
       handleCallStream(incomingCall);
       ensureDataConn(incomingCall.peer);
@@ -1190,7 +1201,9 @@ const VideoChat = (() => {
         const pc = call.peerConnection;
         if (!pc) continue;
         if (typeof pc.getTransceivers === "function") {
-          const tr = pc.getTransceivers().find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
+          const tr = pc
+            .getTransceivers()
+            .find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
           sender = tr ? tr.sender : null;
         }
         if (!sender) {
@@ -1205,7 +1218,10 @@ const VideoChat = (() => {
           // Keep the cache fresh so subsequent toggles find the correct sender.
           if (call.sendersByKind) call.sendersByKind[kind] = sender;
         } catch (err) {
-          console.warn(`[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`, err);
+          console.warn(
+            `[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`,
+            err
+          );
         }
       }
     }
@@ -1464,14 +1480,14 @@ const VideoChat = (() => {
     localSpeakingUntil = 0;
     setTileSpeakingIndicator("local", false);
     if (typeof VoiceChanger !== "undefined") VoiceChanger.destroy();
-    
+
     /* Reset monitor button state */
     const monitorBtn = $("btn-monitor");
     if (monitorBtn) {
       monitorBtn.classList.remove("active");
       monitorBtn.setAttribute("aria-pressed", "false");
     }
-    
+
     /* Reset voice mode buttons to normal, clear all per-effect slider rows */
     document.querySelectorAll("[data-voice-mode]").forEach((btn) => {
       const isNormal = btn.dataset.voiceMode === "normal";
@@ -1502,9 +1518,7 @@ const VideoChat = (() => {
       // sender's current track has been set to null by a mute cycle.
       let sender = call.sendersByKind ? call.sendersByKind["audio"] : null;
       if (!sender && call.peerConnection) {
-        sender = call.peerConnection
-          .getSenders()
-          .find((s) => s.track && s.track.kind === "audio");
+        sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "audio");
         if (sender && call.sendersByKind) call.sendersByKind["audio"] = sender;
       }
       if (sender) {
@@ -1832,7 +1846,7 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3 style="display:flex;align-items:center;gap:0.5rem"><i class="fa-solid fa-shield-halved text-primary" aria-hidden="true"></i>Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name"></strong>?</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <i class="fa-solid fa-circle-info text-primary" aria-hidden="true"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
@@ -1892,7 +1906,9 @@ const VideoChat = (() => {
         // Use cached sender reference (robust against null tracks)
         let sender = call.sendersByKind ? call.sendersByKind.video : null;
         if (!sender && call.peerConnection) {
-          sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
+          sender = call.peerConnection
+            .getSenders()
+            .find((s) => s.track && s.track.kind === "video");
         }
         if (sender) await sender.replaceTrack(screenTrack);
       }
@@ -2008,7 +2024,7 @@ const VideoChat = (() => {
     readInitialMediaPreferencesFromUrl();
     applyInitialMediaPreferences();
     updateLocalTilePresentation();
-    
+
     // Start media eagerly only when the initial preference explicitly enables mic/camera.
     if (initialMediaPreferences.mic || initialMediaPreferences.cam) {
       const ok = await startLocalMedia();
@@ -2019,7 +2035,7 @@ const VideoChat = (() => {
     }
 
     _applyStoredVoicePreferences();
-    
+
     // Always init peer regardless of success of startLocalMedia (can join without media)
     await initPeer();
     checkInitialPermissions();

@@ -157,6 +157,7 @@ class Default(WorkerEntrypoint):
                             status=404,
                             headers=base_headers('text/plain; charset=utf-8'))
         except asyncio.CancelledError:
+            # Preserve cooperative cancellation semantics for async runtimes.
             raise
         except Exception as exc:
             traceback.print_exc()
