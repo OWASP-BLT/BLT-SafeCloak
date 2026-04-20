@@ -160,39 +160,6 @@ body {
    ============================================ */
 
 /* === Status Indicators === */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #16a34a;
-  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
-}
-
-.status-dot.offline {
-  background: #9ca3af;
-}
-
-.status-dot.connecting {
-  background: #f59e0b;
-  animation: pulse-dot 1.4s infinite;
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.45;
-  }
-}
-
 /* === Video Grid (multi-participant) === */
 .video-grid {
   display: grid;
@@ -217,6 +184,104 @@ body {
   position: absolute;
   left: 0.65rem;
   bottom: 0.65rem;
+}
+
+.video-avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(225, 1, 1, 0.18), rgba(17, 24, 39, 0) 45%),
+    radial-gradient(circle at 80% 82%, rgba(225, 1, 1, 0.1), rgba(17, 24, 39, 0) 40%),
+    #0f172a;
+  z-index: 4;
+}
+
+.video-avatar-initials {
+  width: 72px;
+  height: 72px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(225, 1, 1, 0.2);
+  border: 1px solid rgba(225, 1, 1, 0.5);
+  color: #fef2f2;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.video-avatar-name {
+  max-width: 90%;
+  padding: 0 0.5rem;
+  color: #f9fafb;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-speaking-indicator {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  opacity: 0.35;
+  transform: scale(0.96);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    background 0.12s ease;
+  z-index: 6;
+}
+
+.video-speaking-indicator.active {
+  opacity: 1;
+  transform: scale(1);
+  background: rgba(22, 163, 74, 0.9);
+  border-color: rgba(22, 163, 74, 0.9);
+}
+
+.video-state-icons {
+  position: absolute;
+  right: 0.65rem;
+  bottom: 0.62rem;
+  display: inline-flex;
+  gap: 0.35rem;
+  z-index: 6;
+}
+
+.video-state-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 0.68rem;
+}
+
+.video-state-icon.off {
+  background: rgba(185, 28, 28, 0.92);
+  border-color: rgba(254, 202, 202, 0.8);
 }
 
 /* === Video Controls === */
@@ -247,6 +312,84 @@ body {
   background: #b91c1c;
   border-color: #b91c1c;
   color: #ffffff;
+}
+
+/* === Compact Voice Effect Chips === */
+.voice-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0.4rem 0.25rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid var(--blt-neutral-border);
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  font-size: 0.7rem;
+  min-height: 44px; /* accessible touch target */
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation; /* prevent double-tap zoom on mobile */
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.voice-chip:hover {
+  border-color: var(--blt-primary);
+  background: #fff5f5;
+  color: var(--blt-primary);
+}
+
+.voice-chip.active {
+  border-color: var(--blt-primary);
+  background: #feeae9;
+  color: var(--blt-primary);
+  font-weight: 700;
+}
+
+/* === Voice Monitor Sliders === */
+.voice-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px; /* slightly taller track for easier touch interaction */
+  border-radius: 9999px;
+  /* Base gradient — overridden inline by JS to show fill progress */
+  background: linear-gradient(to right, #e10101 50%, #e5e7eb 50%);
+  outline: none;
+  cursor: pointer;
+  display: block;
+  touch-action: manipulation; /* prevent double-tap zoom on mobile */
+}
+
+.voice-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px; /* larger thumb for mobile touch */
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blt-primary);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--blt-primary);
+}
+
+.voice-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blt-primary);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--blt-primary);
+}
+
+.voice-slider:focus {
+  background: #e5e7eb;
 }
 
 /* === Voice Meter === */
