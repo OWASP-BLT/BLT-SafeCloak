@@ -48,11 +48,11 @@
     />
     <link rel="stylesheet" href="css/main.css" />
   </head>
-  <body class="bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-gray-100 font-sans antialiased">
+  <body class="bg-gray-50 dark:bg-dark-base text-gray-900 dark:text-gray-100 font-sans antialiased">
     <div class="pointer-events-none fixed inset-x-0 top-0 -z-10 h-full hero-glow"></div>
 
     <nav
-      class="sticky top-0 z-50 border-b border-neutral-border dark:border-gray-700 bg-white/95 dark:bg-[#1F2937]/95 backdrop-blur"
+      class="sticky top-0 z-50 border-b border-neutral-border dark:border-gray-700 bg-white/95 dark:bg-dark-surface/95 backdrop-blur"
       role="navigation"
       aria-label="Main navigation"
     >
@@ -84,7 +84,7 @@
         </button>
 
         <ul
-          class="navbar-nav hidden absolute left-4 right-4 top-[4.2rem] flex-col gap-2 rounded-lg border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] p-3 md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0"
+          class="navbar-nav hidden absolute left-4 right-4 top-[4.2rem] flex-col gap-2 rounded-lg border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface p-3 md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0"
           id="navbar-nav"
           role="list"
         >
@@ -187,7 +187,7 @@
 
         <div class="notes-layout" role="main" aria-label="Notes application">
           <aside
-            class="notes-sidebar border border-neutral-border dark:border-gray-700 rounded-xl bg-white dark:bg-[#1F2937] shadow-md"
+            class="notes-sidebar border border-neutral-border dark:border-gray-700 rounded-xl bg-white dark:bg-dark-surface shadow-md"
             aria-label="Notes list"
           >
             <div
@@ -206,7 +206,7 @@
                   <i class="fa-solid fa-plus" aria-hidden="true"></i>
                 </button>
                 <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                   id="btn-export-all"
                   aria-label="Export all notes"
                   title="Export all notes as JSON"
@@ -219,7 +219,7 @@
           </aside>
 
           <div
-            class="note-editor border border-neutral-border dark:border-gray-700 rounded-xl bg-white dark:bg-[#1F2937] shadow-md"
+            class="note-editor border border-neutral-border dark:border-gray-700 rounded-xl bg-white dark:bg-dark-surface shadow-md"
             aria-label="Note editor"
           >
             <div
@@ -244,7 +244,7 @@
               style="display: none; flex-direction: column; flex: 1; overflow: hidden"
             >
               <div
-                class="editor-toolbar border-b border-gray-100 dark:border-gray-700 px-4 py-3 bg-gray-50 dark:bg-[#111827]"
+                class="editor-toolbar border-b border-gray-100 dark:border-gray-700 px-4 py-3 bg-gray-50 dark:bg-dark-base"
                 role="toolbar"
                 aria-label="Note toolbar"
               >
@@ -259,7 +259,7 @@
                 <div class="mx-1 h-4 w-px bg-gray-300 dark:bg-gray-600" aria-hidden="true"></div>
                 <span class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Export</span>
                 <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                   id="btn-export-txt"
                   title="Export as .txt"
                   aria-label="Export as text"
@@ -267,7 +267,7 @@
                   .txt
                 </button>
                 <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                   id="btn-export-md"
                   title="Export as .md"
                   aria-label="Export as Markdown"
@@ -275,7 +275,7 @@
                   .md
                 </button>
                 <button
-                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                  class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                   id="btn-export-json"
                   title="Export as .json"
                   aria-label="Export as JSON"
@@ -318,28 +318,28 @@
                   aria-label="AI analysis tools"
                 >
                   <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                     id="btn-summarize"
                     aria-label="Summarize note"
                   >
                     <i class="fa-solid fa-file-lines" aria-hidden="true"></i>Summarize
                   </button>
                   <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                     id="btn-keypoints"
                     aria-label="Extract key points"
                   >
                     <i class="fa-solid fa-key" aria-hidden="true"></i>Key Points
                   </button>
                   <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                     id="btn-actions"
                     aria-label="Find action items"
                   >
                     <i class="fa-solid fa-list-check" aria-hidden="true"></i>Action Items
                   </button>
                   <button
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
+                    class="inline-flex items-center justify-center gap-2 rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 transition hover:border-primary hover:text-primary hover:bg-red-50 dark:hover:bg-red-900/20"
                     id="btn-keywords"
                     aria-label="Analyze keywords"
                   >
@@ -360,7 +360,7 @@
         </div>
 
         <div
-          class="surface-card border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] shadow-md mt-6 rounded-xl p-4"
+          class="surface-card border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface shadow-md mt-6 rounded-xl p-4"
         >
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -388,7 +388,7 @@
       </main>
     </div>
 
-    <footer class="border-t border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] py-7" role="contentinfo">
+    <footer class="border-t border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface py-7" role="contentinfo">
       <div class="mx-auto max-w-6xl px-4 text-center text-sm text-gray-600 dark:text-gray-300 sm:px-6 lg:px-8">
         BLT-SafeCloak -
         <a

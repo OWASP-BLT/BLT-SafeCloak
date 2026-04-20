@@ -48,12 +48,12 @@
     />
     <link rel="stylesheet" href="css/main.css" />
   </head>
-  <body class="bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-gray-100 font-sans antialiased">
+  <body class="bg-gray-50 dark:bg-dark-base text-gray-900 dark:text-gray-100 font-sans antialiased">
     <div class="pointer-events-none fixed inset-x-0 top-0 -z-10 h-full hero-glow"></div>
 
     <!-- Navbar -->
     <nav
-      class="sticky top-0 z-50 border-b border-neutral-border dark:border-gray-700 bg-white/95 dark:bg-[#1F2937]/95 backdrop-blur"
+      class="sticky top-0 z-50 border-b border-neutral-border dark:border-gray-700 bg-white/95 dark:bg-dark-surface/95 backdrop-blur"
       role="navigation"
       aria-label="Main navigation"
     >
@@ -81,7 +81,7 @@
         </button>
 
         <ul
-          class="navbar-nav hidden absolute left-4 right-4 top-[4.2rem] flex-col gap-2 rounded-lg border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] p-3 md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0"
+          class="navbar-nav hidden absolute left-4 right-4 top-[4.2rem] flex-col gap-2 rounded-lg border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface p-3 md:static md:flex md:flex-row md:items-center md:gap-1 md:border-0 md:bg-transparent md:p-0"
           id="navbar-nav"
           role="list"
         >
@@ -152,7 +152,7 @@
       <section class="px-4 pb-12 pt-14 sm:px-6 lg:px-8 lg:pt-20" aria-labelledby="hero-heading">
         <div class="mx-auto max-w-6xl text-center">
           <div
-            class="mx-auto inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300"
+            class="mx-auto inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300"
           >
             <i class="fa-solid fa-lock text-primary" aria-hidden="true"></i>
             <span>OWASP BLT Project - End-to-End Encrypted</span>
@@ -186,24 +186,24 @@
           </div>
           <div class="mt-7 flex flex-wrap justify-center gap-2.5">
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
+              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
             >
               <i class="fa-solid fa-key text-primary" aria-hidden="true"></i>AES-256-GCM Encrypted
             </span>
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
+              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
             >
               <i class="fa-solid fa-network-wired text-primary" aria-hidden="true"></i>WebRTC
               Peer-to-Peer
             </span>
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
+              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
             >
               <i class="fa-solid fa-server text-primary" aria-hidden="true"></i>No Data Sent to
               Servers
             </span>
             <span
-              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
+              class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm"
             >
               <i class="fa-solid fa-scale-balanced text-primary" aria-hidden="true"></i>GDPR Consent
               Records
@@ -294,7 +294,7 @@
                 <input
                   type="text"
                   id="feature-search"
-                  class="w-full rounded-md border border-gray-400 dark:border-gray-600 bg-white dark:bg-[#1F2937] py-2 pl-10 pr-4 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                  class="w-full rounded-md border border-gray-400 dark:border-gray-600 bg-white dark:bg-dark-surface py-2 pl-10 pr-4 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-red-600 focus:ring-1 focus:ring-red-600"
                   placeholder="Search features: notes, consent, encryption..."
                   aria-label="Search feature cards"
                 />
@@ -403,7 +403,7 @@
               </div>
               <p
                 id="feature-empty"
-              class="hidden rounded-md border border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] p-4 text-sm font-semibold text-gray-600 dark:text-gray-300"
+              class="hidden rounded-md border border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface p-4 text-sm font-semibold text-gray-600 dark:text-gray-300"
               >
                 No feature matches that search. Try terms like "notes", "voice", or "consent".
               </p>
@@ -543,7 +543,7 @@
       <!-- CTA -->
       <section class="px-4 pb-16 sm:px-6 lg:px-8" aria-label="Call to action">
         <div
-          class="mx-auto max-w-4xl rounded-2xl border border-neutral-border dark:border-gray-700 bg-gradient-to-r from-[#fff5f5] to-white dark:from-[#1F2937] dark:to-[#111827] p-8 text-center sm:p-10"
+          class="mx-auto max-w-4xl rounded-2xl border border-neutral-border dark:border-gray-700 bg-gradient-to-r from-[#fff5f5] to-white dark:from-dark-surface dark:to-dark-base p-8 text-center sm:p-10"
         >
           <h2 class="text-3xl font-extrabold text-gray-900 dark:text-gray-100">Ready to Communicate Privately?</h2>
           <p class="mx-auto mt-3 max-w-2xl text-gray-600 dark:text-gray-300">
@@ -572,7 +572,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-neutral-border dark:border-gray-700 bg-white dark:bg-[#1F2937] py-8" role="contentinfo">
+    <footer class="border-t border-neutral-border dark:border-gray-700 bg-white dark:bg-dark-surface py-8" role="contentinfo">
       <div class="mx-auto max-w-6xl px-4 text-center sm:px-6 lg:px-8">
         <p class="text-sm text-gray-600 dark:text-gray-300">
           BLT-SafeCloak is an

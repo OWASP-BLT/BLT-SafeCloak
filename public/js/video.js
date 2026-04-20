@@ -1074,7 +1074,7 @@ const VideoChat = (() => {
 
       const disconnectBtn = document.createElement("button");
       disconnectBtn.className =
-        "control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200";
+        "control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-dark-base text-gray-700 dark:text-gray-200";
       disconnectBtn.style.cssText = "width:32px;height:32px;font-size:0.75rem";
       disconnectBtn.title = `Disconnect ${getDisplayLabel(peerId)}`;
       disconnectBtn.setAttribute("aria-label", `Disconnect ${getDisplayLabel(peerId)}`);

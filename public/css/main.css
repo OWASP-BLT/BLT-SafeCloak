@@ -5,6 +5,8 @@
 /* === Root Variables === */
 :root {
   --blt-primary: #e10101;
+  /* Readable accent on dark surfaces (#111827 / #1f2937); use for text/border in .dark */
+  --blt-primary-on-dark: #f87171;
   --blt-neutral-border: #e5e5e5;
   --blt-dark-base: #111827;
   --blt-dark-surface: #1f2937;
@@ -44,6 +46,7 @@ body {
 
 .dark .nav-link.active {
   background: rgba(127, 29, 29, 0.3);
+  color: var(--blt-primary-on-dark);
 }
 
 .navbar-nav.open {
@@ -104,6 +107,8 @@ body {
 
 .dark .btn-outline-blt {
   background: transparent;
+  color: var(--blt-primary-on-dark);
+  border-color: var(--blt-primary-on-dark);
 }
 
 .btn-outline-blt:hover {
@@ -120,6 +125,7 @@ body {
 
 .dark .side-link.active {
   background: rgba(127, 29, 29, 0.3);
+  color: var(--blt-primary-on-dark);
 }
 
 /* === Toast Notifications === */
@@ -351,6 +357,31 @@ body {
   font-weight: 700;
 }
 
+.dark .control-btn:hover {
+  color: var(--blt-primary-on-dark);
+  border-color: var(--blt-primary-on-dark);
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.dark .voice-chip {
+  border-color: #4b5563;
+  background: var(--blt-dark-base);
+  color: #e5e7eb;
+}
+
+.dark .voice-chip:hover {
+  border-color: var(--blt-primary-on-dark);
+  background: rgba(127, 29, 29, 0.2);
+  color: var(--blt-primary-on-dark);
+}
+
+.dark .voice-chip.active {
+  border-color: var(--blt-primary-on-dark);
+  background: rgba(127, 29, 29, 0.35);
+  color: var(--blt-primary-on-dark);
+  font-weight: 700;
+}
+
 /* === Voice Monitor Sliders === */
 .voice-slider {
   -webkit-appearance: none;
@@ -521,7 +552,7 @@ body {
 }
 
 .dark .modal .btn-secondary:hover {
-  border-color: #e10101;
+  border-color: var(--blt-primary-on-dark);
   color: #fca5a5;
   background: rgba(127, 29, 29, 0.25);
 }
@@ -616,7 +647,7 @@ body {
 
 .dark .note-item.active {
   background: rgba(127, 29, 29, 0.35);
-  border-color: #e10101;
+  border-color: var(--blt-primary-on-dark);
 }
 
 .dark .note-item-title {
@@ -771,6 +802,10 @@ body {
   color: #d1d5db;
 }
 
+.dark .checkbox-wrapper input[type="checkbox"] {
+  accent-color: var(--blt-primary-on-dark);
+}
+
 /* === Consent Layout === */
 .consent-layout {
   display: grid;
@@ -897,6 +932,10 @@ body {
   border-color: #374151;
   background: #1f2937;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.dark .stat-value {
+  color: var(--blt-primary-on-dark);
 }
 
 .stat-value {
