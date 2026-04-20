@@ -8,6 +8,7 @@
       name="description"
       content="In-call secure meeting workspace for BLT-SafeCloak peer-to-peer encrypted video chat."
     />
+    <script src="js/theme-toggle.js"></script>
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path fill='%23E10101' d='M32 4l22 8v17c0 14-9.7 26.3-22 30C19.7 55.3 10 43 10 29V12z'/><path fill='white' d='M32 16l12 4v9c0 7.9-5.2 14.9-12 17-6.8-2.1-12-9.1-12-17v-9z'/></svg>"
@@ -16,12 +17,15 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: "class",
         theme: {
           extend: {
             colors: {
               primary: "#E10101",
               "primary-hover": "#b91c1c",
               "neutral-border": "#E5E5E5",
+              "dark-base": "#111827",
+              "dark-surface": "#1F2937",
             },
             fontFamily: {
               sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
@@ -46,12 +50,12 @@
     />
     <link rel="stylesheet" href="css/main.css" />
   </head>
-  <body class="font-sans antialiased">
+  <body class="bg-gray-50 dark:bg-[#111827] text-gray-900 dark:text-gray-100 font-sans antialiased">
     <div class="pointer-events-none fixed inset-x-0 top-0 -z-10 h-full hero-glow"></div>
 
     <div class="mx-auto flex min-h-screen w-full flex-col">
       <header
-        class="mb-4 flex items-center justify-between border border-neutral-border bg-white/95 px-4 py-3 shadow-sm backdrop-blur"
+        class="mb-4 flex flex-wrap items-center justify-between gap-3 border border-neutral-border dark:border-gray-700 bg-white/95 dark:bg-[#1F2937]/95 px-4 py-3 shadow-sm backdrop-blur"
       >
         <a class="flex items-center gap-3" href="/" aria-label="BLT-SafeCloak Home">
           <img
@@ -64,22 +68,40 @@
             "
           />
           <div>
-            <p class="text-sm font-extrabold leading-none sm:text-base">BLT-SafeCloak</p>
-            <p class="text-xs font-medium text-gray-500">OWASP BLT Extension</p>
+            <p class="text-sm font-extrabold leading-none sm:text-base text-gray-900 dark:text-gray-100">
+              BLT-SafeCloak
+            </p>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">OWASP BLT Extension</p>
           </div>
         </a>
 
-        <div
-          class="inline-flex items-center gap-2 rounded-full border border-neutral-border bg-white px-3 py-1.5 text-xs shadow-sm sm:text-sm"
-        >
-          <span class="status-dot connecting" id="status-dot" aria-label="Connection status"></span>
-          <span id="connection-status" class="text-muted">Initializing...</span>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <div
+            class="inline-flex items-center gap-2 rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 shadow-sm sm:text-sm"
+          >
+            <span class="status-dot connecting" id="status-dot" aria-label="Connection status"></span>
+            <span id="connection-status" class="text-gray-600 dark:text-gray-300">Initializing...</span>
+          </div>
+          <button
+            id="theme-toggle"
+            type="button"
+            class="rounded-md border border-neutral-border dark:border-gray-600 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Toggle dark mode"
+            aria-pressed="false"
+          >
+            <i class="fa-solid fa-moon dark:hidden" aria-hidden="true"></i>
+            <i class="fa-solid fa-sun hidden dark:inline" aria-hidden="true"></i>
+          </button>
         </div>
       </header>
 
-      <main id="voice" class="flex-1 px-10">
-        <div class="alert alert-info mb-4" id="perm-alert">
-          <i class="fa-solid fa-circle-info mt-0.5" aria-hidden="true"></i>
+      <main id="voice" class="flex-1 px-4 sm:px-6 lg:px-10">
+        <div
+          class="mb-4 flex gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100"
+          id="perm-alert"
+          role="status"
+        >
+          <i class="fa-solid fa-circle-info mt-0.5 flex-none text-primary" aria-hidden="true"></i>
           <span
             >Allow camera and microphone access when prompted. Your media stays peer-to-peer and is
             only shared with selected participants.</span
@@ -89,19 +111,22 @@
         <div
           id="camera-denied"
           style="display: none; flex-direction: column; gap: 0.85rem"
-          class="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-gray-900"
+          class="mb-5 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 p-4 text-gray-900 dark:text-gray-100"
           role="alert"
           aria-live="assertive"
         >
-          <div class="flex items-center gap-2 text-base font-bold text-red-700">
+          <div class="flex items-center gap-2 text-base font-bold text-red-700 dark:text-red-400">
             <i class="fa-solid fa-video-slash" aria-hidden="true"></i>
             Camera &amp; microphone access was blocked
           </div>
-          <div id="camera-denied-instructions" class="text-sm leading-relaxed"></div>
+          <div
+            id="camera-denied-instructions"
+            class="text-sm leading-relaxed text-gray-800 dark:text-gray-200"
+          ></div>
           <div>
             <button
               id="btn-camera-retry"
-              class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
+              class="btn-primary-blt inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold transition"
             >
               <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
               Try Again
@@ -112,7 +137,7 @@
         <div class="grid gap-4 xl:grid-cols-[1fr_320px]" id="main-grid">
           <section class="flex min-h-[64vh] flex-col gap-4 pb-24">
             <div
-              class="video-grid rounded-2xl border border-neutral-border bg-white p-3 shadow-sm"
+              class="video-grid rounded-2xl border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#1F2937] p-3 shadow-sm"
               id="video-grid"
               aria-label="Video feeds"
             >
@@ -140,12 +165,10 @@
               </div>
             </div>
 
-            <div
-              class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm"
-              aria-label="Voice activity meter"
-            >
+            <div class="surface-card rounded-2xl p-4" aria-label="Voice activity meter">
               <div class="flex flex-wrap items-center gap-3">
-                <span class="text-xs font-bold uppercase tracking-wide text-gray-500"
+                <span
+                  class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400"
                   >Voice Activity</span
                 >
                 <div class="voice-meter" aria-hidden="true">
@@ -159,24 +182,32 @@
                   <div class="voice-bar"></div>
                 </div>
                 <div class="ml-auto flex flex-wrap gap-2 text-xs">
-                  <span class="badge badge-success" id="badge-noise-suppression"
+                  <span
+                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-200"
+                    id="badge-noise-suppression"
                     >Noise Suppression</span
                   >
-                  <span class="badge badge-success">Echo Cancel</span>
-                  <span class="badge badge-primary">Auto Gain</span>
+                  <span
+                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-200"
+                    >Echo Cancel</span
+                  >
+                  <span
+                    class="inline-flex items-center rounded-full border border-red-200 bg-[#feeae9] px-2 py-0.5 font-bold text-primary dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200"
+                    >Auto Gain</span
+                  >
                 </div>
               </div>
             </div>
 
             <div
-              class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm"
+              class="surface-card rounded-2xl p-4"
               id="voice-effects-panel"
               aria-label="Voice effects"
               aria-live="polite"
             >
               <div class="grid grid-cols-4 gap-1.5" role="group" aria-label="Voice effect options">
                 <button
-                  class="voice-chip active"
+                  class="voice-chip active dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="normal"
                   onclick="VideoChat.setVoiceMode('normal')"
                   title="Clear all voice effects"
@@ -186,7 +217,7 @@
                   <span>Normal</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="deep"
                   onclick="VideoChat.toggleEffectMode('deep')"
                   title="Toggle deep voice"
@@ -196,7 +227,7 @@
                   <span>Deep</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="chipmunk"
                   onclick="VideoChat.toggleEffectMode('chipmunk')"
                   title="Toggle chipmunk voice"
@@ -206,7 +237,7 @@
                   <span>Chipmunk</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="robot"
                   onclick="VideoChat.toggleEffectMode('robot')"
                   title="Toggle robot voice"
@@ -216,7 +247,7 @@
                   <span>Robot</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="echo"
                   onclick="VideoChat.toggleEffectMode('echo')"
                   title="Toggle echo effect"
@@ -226,7 +257,7 @@
                   <span>Echo</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="voice1"
                   onclick="VideoChat.toggleEffectMode('voice1')"
                   title="Toggle telephone voice"
@@ -236,7 +267,7 @@
                   <span>Phone</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="voice2"
                   onclick="VideoChat.toggleEffectMode('voice2')"
                   title="Toggle alien voice"
@@ -246,7 +277,7 @@
                   <span>Alien</span>
                 </button>
                 <button
-                  class="voice-chip"
+                  class="voice-chip dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   data-voice-mode="voice3"
                   onclick="VideoChat.toggleEffectMode('voice3')"
                   title="Toggle monster voice"
@@ -259,9 +290,11 @@
 
               <div id="effect-sliders-container" aria-live="polite"></div>
 
-              <div class="mt-2 flex flex-wrap items-center gap-2 border-t border-neutral-border pt-2">
+              <div
+                class="mt-2 flex flex-wrap items-center gap-2 border-t border-neutral-border dark:border-gray-600 pt-2"
+              >
                 <button
-                  class="voice-chip flex-none"
+                  class="voice-chip flex-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-primary dark:[&.active]:border-primary dark:[&.active]:bg-red-900/30 dark:[&.active]:text-primary"
                   id="btn-monitor"
                   title="Hear yourself with the selected voice effect"
                   aria-pressed="false"
@@ -335,22 +368,22 @@
           </section>
 
           <aside aria-label="Room setup and connection info" class="space-y-4">
-            <div class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm">
+            <div class="surface-card rounded-2xl p-4">
               <h2
-                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700"
+                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200"
               >
                 <i class="fa-solid fa-key text-primary" aria-hidden="true"></i>
                 Your Room ID
               </h2>
               <div
-                class="rounded-lg border border-neutral-border bg-gray-50 px-3 py-3 text-center font-mono text-lg font-bold tracking-widest text-gray-900"
+                class="rounded-lg border border-neutral-border dark:border-gray-600 bg-gray-50 dark:bg-gray-900/80 px-3 py-3 text-center font-mono text-lg font-bold tracking-widest text-gray-900 dark:text-gray-100"
                 id="my-peer-id"
                 aria-label="Your room ID"
               >
                 Connecting...
               </div>
               <button
-                class="btn btn-secondary mt-3 w-full"
+                class="btn-outline-blt mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition"
                 id="btn-copy-room-id"
                 aria-label="Copy room ID to clipboard"
               >
@@ -358,7 +391,7 @@
                 Copy Room ID
               </button>
               <button
-                class="btn btn-primary mt-2 w-full"
+                class="btn-primary-blt mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition"
                 id="btn-copy-link"
                 aria-label="Copy shareable room link to clipboard"
               >
@@ -367,22 +400,21 @@
               </button>
             </div>
 
-            <div
-              id="add-participant-card"
-              class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm"
-            >
+            <div id="add-participant-card" class="surface-card rounded-2xl p-4">
               <h2
-                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700"
+                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200"
               >
                 <i class="fa-solid fa-phone text-primary" aria-hidden="true"></i>
                 Add Participant
               </h2>
-              <label class="mb-2 block text-sm font-semibold text-gray-700" for="remote-id"
+              <label
+                class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200"
+                for="remote-id"
                 >Remote Room ID</label
               >
               <input
                 type="text"
-                class="w-full rounded-md border border-neutral-border px-4 py-2 text-gray-900 placeholder-gray-500 transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                class="w-full rounded-md border border-neutral-border dark:border-gray-600 bg-white dark:bg-gray-900 px-4 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 id="remote-id"
                 placeholder="Enter Room ID..."
                 autocomplete="off"
@@ -393,7 +425,7 @@
                 required
               />
               <button
-                class="btn btn-primary mt-3 w-full"
+                class="btn-primary-blt mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-bold transition"
                 id="btn-call"
                 aria-label="Add participant to room"
               >
@@ -402,34 +434,36 @@
               </button>
             </div>
 
-            <div class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm">
+            <div class="surface-card rounded-2xl p-4">
               <h2
-                class="mb-3 flex items-center text-sm font-bold uppercase tracking-wide text-gray-700"
+                class="mb-3 flex items-center text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200"
               >
                 <i class="fa-solid fa-users mr-2 text-primary" aria-hidden="true"></i>
                 Participants
                 <span
                   id="participant-count"
-                  class="ml-auto text-xs font-bold text-gray-500"
+                  class="ml-auto text-xs font-bold text-gray-500 dark:text-gray-400"
                   aria-live="polite"
                   >0 connected</span
                 >
               </h2>
               <div id="participants-list">
-                <p class="py-2 text-center text-sm text-gray-500">No participants connected</p>
+                <p class="py-2 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No participants connected
+                </p>
               </div>
             </div>
           </aside>
         </div>
 
         <div
-          class="video-controls fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center gap-2 rounded-2xl border border-neutral-border bg-white/95 p-3 shadow-xl backdrop-blur"
+          class="video-controls fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center gap-2 rounded-2xl border border-neutral-border dark:border-gray-600 bg-white/95 dark:bg-[#1F2937]/95 p-3 shadow-xl backdrop-blur"
           id="call-controls"
           role="toolbar"
           aria-label="Call controls"
         >
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-mic"
             title="Unmute mic"
             onclick="VideoChat.toggleMic()"
@@ -439,7 +473,7 @@
             <i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>
           </button>
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-cam"
             title="Enable camera"
             onclick="VideoChat.toggleCamera()"
@@ -449,7 +483,7 @@
             <i class="fa-solid fa-video-slash" aria-hidden="true"></i>
           </button>
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-hand"
             title="Raise hand"
             onclick="VideoChat.toggleRaiseHand()"
@@ -459,7 +493,7 @@
             <i class="fa-solid fa-hand" aria-hidden="true"></i>
           </button>
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-noise"
             title="Toggle noise suppression"
             onclick="VideoChat.toggleNoiseSuppression()"
@@ -468,7 +502,7 @@
             <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
           </button>
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-screen"
             title="Share screen"
             onclick="VideoChat.shareScreen()"
@@ -477,7 +511,7 @@
             <i class="fa-solid fa-display" aria-hidden="true"></i>
           </button>
           <button
-            class="control-btn rounded-full border border-neutral-border bg-white text-gray-700"
+            class="control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200 dark:hover:border-primary dark:hover:bg-red-900/20 dark:hover:text-red-200"
             id="btn-voice-changer"
             title="Voice effects"
             onclick="VideoChat.toggleVoiceEffectsPanel()"
@@ -501,6 +535,14 @@
     </div>
 
     <div id="toast-container" role="status" aria-live="polite"></div>
+
+    <!-- Tailwind safelist: connection status tones set from public/js/video.js -->
+    <div class="hidden" aria-hidden="true">
+      <span class="text-gray-700 dark:text-gray-200"></span>
+      <span class="text-red-600 dark:text-red-400"></span>
+      <span class="text-amber-600 dark:text-amber-400"></span>
+      <span class="text-green-700 dark:text-green-400"></span>
+    </div>
 
     <script
       src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"

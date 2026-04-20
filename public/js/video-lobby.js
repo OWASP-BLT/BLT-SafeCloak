@@ -147,7 +147,8 @@
     row.setAttribute("data-prejoin-effect-slider", mode);
 
     const lbl = document.createElement("span");
-    lbl.className = "flex-none flex items-center gap-1 text-[11px] font-semibold text-gray-500";
+    lbl.className =
+      "flex-none flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400";
     lbl.style.minWidth = "4.5rem";
     lbl.innerHTML = `<i class="fa-solid ${modeInfo.icon} text-[10px]" aria-hidden="true"></i>${modeInfo.label}`;
     row.appendChild(lbl);

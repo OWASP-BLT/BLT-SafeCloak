@@ -72,9 +72,9 @@ const ConsentManager = (() => {
         ${entry.details ? `<div class="consent-entry-details">${escHtml(entry.details)}</div>` : ""}
         ${entry.purpose ? `<div class="consent-entry-details text-secondary" style="margin-top:0.2rem">Purpose: ${escHtml(entry.purpose)}</div>` : ""}
         <div class="consent-entry-hash" title="Integrity hash">🔏 ${entry.hash}</div>
-        <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
-          <button class="btn btn-sm btn-secondary" data-action="verify" data-entry-id="${entry.id}">Verify</button>
-          <button class="btn btn-sm btn-danger" data-action="delete" data-entry-id="${entry.id}">Delete</button>
+        <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button type="button" class="btn-outline-blt inline-flex items-center justify-center rounded-md px-2.5 py-1 text-xs font-bold transition" data-action="verify" data-entry-id="${entry.id}">Verify</button>
+          <button type="button" class="inline-flex items-center justify-center rounded-md border border-red-600 bg-white px-2.5 py-1 text-xs font-bold text-red-600 transition hover:bg-red-50 dark:border-red-500 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/25" data-action="delete" data-entry-id="${entry.id}">Delete</button>
         </div>
       </div>
     `

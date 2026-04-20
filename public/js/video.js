@@ -49,6 +49,14 @@ const VideoChat = (() => {
   /* ── DOM helpers ── */
   const $ = (id) => document.getElementById(id);
 
+  const STATUS_TONE = {
+    muted: "text-gray-600 dark:text-gray-300",
+    secondary: "text-gray-700 dark:text-gray-200",
+    danger: "text-red-600 dark:text-red-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    success: "text-green-700 dark:text-green-400",
+  };
+
   function updateStatus(iconClass, text, type = "muted") {
     const el = $("connection-status");
     if (!el) return;
@@ -61,7 +69,8 @@ const VideoChat = (() => {
     }
     const textNode = document.createTextNode(text);
     el.appendChild(textNode);
-    el.className = `text-${type}`;
+    const tone = STATUS_TONE[type] || STATUS_TONE.muted;
+    el.className = `inline-flex flex-wrap items-center ${tone}`;
   }
 
   function navigateToHome() {
@@ -966,7 +975,7 @@ const VideoChat = (() => {
 
     if (!isPeerReady && activeCalls.size === 0) {
       const empty = document.createElement("p");
-      empty.className = "text-sm text-gray-500 text-center py-2";
+      empty.className = "text-sm text-gray-500 dark:text-gray-400 text-center py-2";
       empty.textContent = "No participants connected";
       listEl.appendChild(empty);
       return;
@@ -986,7 +995,8 @@ const VideoChat = (() => {
     localTextWrap.className = "flex min-w-0 flex-col";
 
     const localNameLabel = document.createElement("span");
-    localNameLabel.className = "truncate font-semibold text-gray-900 flex items-center gap-1.5";
+    localNameLabel.className =
+      "truncate font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1.5";
     localNameLabel.title = state.displayName;
 
     const localNameText = document.createElement("span");
@@ -1005,7 +1015,7 @@ const VideoChat = (() => {
     }
 
     const localIdLabel = document.createElement("span");
-    localIdLabel.className = "truncate font-mono text-[11px] text-gray-500";
+    localIdLabel.className = "truncate font-mono text-[11px] text-gray-500 dark:text-gray-400";
     localIdLabel.title = state.peerId || "Not connected";
     localIdLabel.textContent = state.peerId || "Not connected";
 
@@ -1032,7 +1042,8 @@ const VideoChat = (() => {
       textWrap.className = "flex min-w-0 flex-col";
 
       const nameLabel = document.createElement("span");
-      nameLabel.className = "truncate font-semibold text-gray-900 flex items-center gap-1.5";
+      nameLabel.className =
+        "truncate font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1.5";
       nameLabel.title = getDisplayLabel(peerId);
 
       const nameText = document.createElement("span");
@@ -1052,7 +1063,7 @@ const VideoChat = (() => {
       }
 
       const idLabel = document.createElement("span");
-      idLabel.className = "truncate font-mono text-[11px] text-gray-500";
+      idLabel.className = "truncate font-mono text-[11px] text-gray-500 dark:text-gray-400";
       idLabel.title = peerId;
       idLabel.textContent = peerId;
 
@@ -1062,7 +1073,8 @@ const VideoChat = (() => {
       nameSpan.appendChild(textWrap);
 
       const disconnectBtn = document.createElement("button");
-      disconnectBtn.className = "control-btn";
+      disconnectBtn.className =
+        "control-btn rounded-full border border-neutral-border dark:border-gray-600 bg-white dark:bg-[#111827] text-gray-700 dark:text-gray-200";
       disconnectBtn.style.cssText = "width:32px;height:32px;font-size:0.75rem";
       disconnectBtn.title = `Disconnect ${getDisplayLabel(peerId)}`;
       disconnectBtn.setAttribute("aria-label", `Disconnect ${getDisplayLabel(peerId)}`);
@@ -2011,14 +2023,14 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3 style="display:flex;align-items:center;gap:0.5rem"><i class="fa-solid fa-shield-halved text-primary" aria-hidden="true"></i>Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name"></strong>?</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <i class="fa-solid fa-circle-info text-primary" aria-hidden="true"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
           </div>
           <div style="display:flex;gap:0.75rem;justify-content:flex-end">
-            <button class="btn btn-secondary" id="consent-deny">Decline</button>
-            <button class="btn btn-primary" id="consent-allow">I Consent</button>
+            <button type="button" class="btn-outline-blt inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-bold transition" id="consent-deny">Decline</button>
+            <button type="button" class="btn-primary-blt inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-bold transition" id="consent-allow">I Consent</button>
           </div>
         </div>
       `;
