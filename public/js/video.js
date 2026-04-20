@@ -16,6 +16,7 @@ const VideoChat = (() => {
   let camOff = true;
   let consentGiven = false;
   let screenSharing = false;
+  let deafened = false;
   let localHandRaised = false;
   let inviteAutoJoinAttempted = false;
   let inviteAutoJoinRoomId = "";
@@ -278,6 +279,17 @@ const VideoChat = (() => {
     tile.speaking.classList.toggle("active", Boolean(active));
   }
 
+  function syncRemoteAudioPlayback() {
+    const videoGrid = $("video-grid");
+    if (!videoGrid) return;
+
+    videoGrid.querySelectorAll("video").forEach((videoEl) => {
+      if (videoEl.id === "local-video") return;
+      videoEl.muted = deafened;
+      videoEl.defaultMuted = deafened;
+    });
+  }
+
   function ensureRemoteTile(peerId) {
     const existing = getTileElements(peerId);
     if (existing) return existing;
@@ -381,6 +393,10 @@ const VideoChat = (() => {
     }
     if (tile.video) {
       tile.video.setAttribute("aria-label", isLocal ? "Your video" : `Participant ${displayName} video`);
+      if (!isLocal) {
+        tile.video.muted = deafened;
+        tile.video.defaultMuted = deafened;
+      }
     }
     if (tile.avatarInitials) {
       tile.avatarInitials.textContent = initials;
@@ -520,6 +536,24 @@ const VideoChat = (() => {
     peerProfiles.set(peerId, profile);
     updateTilePresentation(peerId);
     updateParticipantsList();
+  }
+
+  function syncDeafenButton() {
+    const deafenBtn = $("btn-deafen");
+    if (!deafenBtn) return;
+    deafenBtn.classList.toggle("active", deafened);
+    deafenBtn.setAttribute("aria-pressed", deafened ? "true" : "false");
+    deafenBtn.title = deafened ? "Undeafen" : "Deafen";
+  }
+
+  async function toggleDeafen() {
+    deafened = !deafened;
+    if (deafened && !micMuted) {
+      await toggleMic();
+    }
+    syncRemoteAudioPlayback();
+    syncDeafenButton();
+    showToast(deafened ? "Incoming voices muted" : "Incoming voices restored", "info");
   }
 
   function sendProfileTo(peerId, force = false) {
@@ -1116,6 +1150,8 @@ const VideoChat = (() => {
     call.on("stream", (remoteStream) => {
       if (videoEl) {
         videoEl.srcObject = remoteStream;
+        videoEl.muted = deafened;
+        videoEl.defaultMuted = deafened;
       }
       attachRemoteSpeakingMonitor(remotePeerId, remoteStream);
       updateTilePresentation(remotePeerId);
@@ -1546,6 +1582,8 @@ const VideoChat = (() => {
     stopAllRemoteSpeakingMonitors();
     localSpeakingUntil = 0;
     setTileSpeakingIndicator("local", false);
+    deafened = false;
+    syncDeafenButton();
     localHandRaised = false;
     syncRaiseHandButton();
     state.connected = false;
@@ -2199,6 +2237,7 @@ const VideoChat = (() => {
 
     _applyStoredVoicePreferences();
     syncRaiseHandButton();
+    syncDeafenButton();
     updateParticipantsList();
     
     // Always init peer regardless of success of startLocalMedia (can join without media)
@@ -2245,6 +2284,7 @@ const VideoChat = (() => {
     endCall,
     hangup,
     toggleNoiseSuppression,
+    toggleDeafen,
     toggleRaiseHand,
     setVoiceMode,
     toggleEffectMode,
