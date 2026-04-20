@@ -29,6 +29,7 @@ const VideoChat = (() => {
   const SPEAKING_HOLD_MS = 260;
   let noiseSuppressionEnabled = true;
   let noiseSuppressionToggleAvailable = true;
+  let noiseSuppressionToggleInFlight = false;
 
   const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff }
   const remoteSpeakingMonitors = new Map(); // peerId -> { analyser, data, source, activeUntil }
@@ -744,7 +745,6 @@ const VideoChat = (() => {
       }
 
       localStream.addTrack(replacementTrack);
-      await updateTracksInCalls(replacementTrack, "audio");
       startVoiceMeter(localStream);
       return true;
     } catch {
@@ -959,19 +959,6 @@ const VideoChat = (() => {
             t.enabled = !micMuted;
             ls.addTrack(t);
           });
-          
-          let freshAudio = ls.getAudioTracks()[ls.getAudioTracks().length - 1];
-          if (typeof VoiceChanger !== "undefined") {
-            const processedAudio = VoiceChanger.init(ls);
-            freshAudio = processedAudio.getAudioTracks()[0] || freshAudio;
-            
-            const videoTrack = ls.getVideoTracks()[0];
-            const tracks = [videoTrack, freshAudio].filter(Boolean);
-            voiceStream = tracks.length ? new MediaStream(tracks) : ls;
-          }
-
-          // Replace track in all active calls with the fresh audio track.
-          await updateTracksInCalls(freshAudio, "audio");
           startVoiceMeter(ls);
         }
         if (constraints.video && stream.getVideoTracks().length > 0) {
@@ -2112,6 +2099,9 @@ const VideoChat = (() => {
 
   /* ── Noise suppression hint ── */
   async function toggleNoiseSuppression() {
+    if (noiseSuppressionToggleInFlight) return;
+    noiseSuppressionToggleInFlight = true;
+    try {
     if (!localStream) {
       showToast("Microphone not available", "warning");
       return;
@@ -2148,6 +2138,9 @@ const VideoChat = (() => {
     _syncNoiseSuppressionUi();
 
     showToast(`Noise suppression ${next ? "enabled" : "disabled"}`, "success");
+    } finally {
+      noiseSuppressionToggleInFlight = false;
+    }
   }
 
   /* ── Consent gate ── */

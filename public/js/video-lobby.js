@@ -16,6 +16,7 @@
   let camEnabled = false;
   let noiseSuppressionEnabled = true;
   let noiseSuppressionToggleAvailable = true;
+  let previewNoiseToggleInFlight = false;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -246,6 +247,10 @@
     // accept the same constraints during a fresh capture request.
     try {
       const wasEnabled = track.enabled;
+      const monitorWasEnabled =
+        typeof VoiceChanger !== "undefined" && typeof VoiceChanger.getMonitorEnabled === "function"
+          ? VoiceChanger.getMonitorEnabled()
+          : false;
       const replacementStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: requested,
@@ -262,6 +267,16 @@
         track.stop();
 
         initPreviewVoiceEngine();
+        if (
+          monitorWasEnabled &&
+          typeof VoiceChanger !== "undefined" &&
+          typeof VoiceChanger.getMonitorEnabled === "function" &&
+          typeof VoiceChanger.toggleMonitor === "function" &&
+          !VoiceChanger.getMonitorEnabled()
+        ) {
+          VoiceChanger.toggleMonitor();
+          _syncMonitorButton();
+        }
 
         noiseSuppressionToggleAvailable = true;
         noiseSuppressionEnabled = requested;
@@ -603,11 +618,17 @@
     const noiseBtn = $("btn-preview-noise");
     if (noiseBtn) {
       noiseBtn.addEventListener("click", async () => {
+        if (previewNoiseToggleInFlight) return;
         if (!hasAudioTrack()) {
           showToast("Microphone required for noise suppression", "warning");
           return;
         }
-        await togglePreviewNoiseSuppression();
+        previewNoiseToggleInFlight = true;
+        try {
+          await togglePreviewNoiseSuppression();
+        } finally {
+          previewNoiseToggleInFlight = false;
+        }
       });
     }
 
@@ -760,7 +781,7 @@
         setTrackEnabled("audio", false);
         setTrackEnabled("video", false);
 
-        await _applyPreviewNoiseSuppression(noiseSuppressionEnabled);
+        _syncPreviewNoiseSuppressionUi();
         updatePreviewUI();
         initPreviewVoiceEngine();
         return;
