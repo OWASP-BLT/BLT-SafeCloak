@@ -14,7 +14,8 @@ const VideoChat = (() => {
   let voiceAnimFrame = null;
   let micMuted = true;
   let camOff = true;
-  let consentGiven = false;
+  let consentPromptHandled = false;
+  let recordingAllowed = true;
   let screenSharing = false;
   let localHandRaised = false;
   let inviteAutoJoinAttempted = false;
@@ -35,6 +36,7 @@ const VideoChat = (() => {
   let speakingAudioContext = null;
   let localSpeakingUntil = 0;
   const lastProfileBroadcastAt = new Map(); // peerId -> timestamp
+  const nonConsentingPeers = new Set();
   let navigationInProgress = false;
   let isEndingCall = false;
   let reconnectAttempts = 0;
@@ -48,6 +50,7 @@ const VideoChat = (() => {
     sessionKey: null,
     displayName: "You",
     displayInitials: "YU",
+    recordingEnabled: true,
   };
 
   /* ── DOM helpers ── */
@@ -116,7 +119,9 @@ const VideoChat = (() => {
     }
 
     try {
-      const fromStorage = normalizeDisplayName(window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY));
+      const fromStorage = normalizeDisplayName(
+        window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY)
+      );
       if (fromStorage) return fromStorage;
     } catch {
       /* ignore storage failures */
@@ -218,6 +223,7 @@ const VideoChat = (() => {
       micMuted: isLocalMicMutedState(),
       camOff: screenSharing ? false : isLocalCamOffState(),
       handRaised: localHandRaised,
+      recordingAllowed,
     };
   }
 
@@ -256,7 +262,8 @@ const VideoChat = (() => {
       stateCam:
         wrapper.querySelector('[data-state="cam"]') || (isLocal ? $("state-icon-local-cam") : null),
       labelName:
-        wrapper.querySelector('[data-role="label-name"]') || (isLocal ? $("label-local-name") : null),
+        wrapper.querySelector('[data-role="label-name"]') ||
+        (isLocal ? $("label-local-name") : null),
     };
   }
 
@@ -385,7 +392,10 @@ const VideoChat = (() => {
       tile.labelName.title = displayName;
     }
     if (tile.video) {
-      tile.video.setAttribute("aria-label", isLocal ? "Your video" : `Participant ${displayName} video`);
+      tile.video.setAttribute(
+        "aria-label",
+        isLocal ? "Your video" : `Participant ${displayName} video`
+      );
     }
     if (tile.avatarInitials) {
       tile.avatarInitials.textContent = initials;
@@ -430,7 +440,9 @@ const VideoChat = (() => {
   }
 
   function stopAllRemoteSpeakingMonitors() {
-    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) => stopRemoteSpeakingMonitor(peerId));
+    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) =>
+      stopRemoteSpeakingMonitor(peerId)
+    );
     if (speakingLoopFrame) {
       cancelAnimationFrame(speakingLoopFrame);
       speakingLoopFrame = null;
@@ -514,12 +526,19 @@ const VideoChat = (() => {
       name: normalizedName || prev.name,
       initials: makeInitials(normalizedName || prev.name),
       micMuted:
-        payload && typeof payload.micMuted === "boolean" ? payload.micMuted : Boolean(prev.micMuted),
-      camOff: payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
+        payload && typeof payload.micMuted === "boolean"
+          ? payload.micMuted
+          : Boolean(prev.micMuted),
+      camOff:
+        payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
       handRaised:
         payload && typeof payload.handRaised === "boolean"
           ? payload.handRaised
           : Boolean(prev.handRaised),
+      recordingAllowed:
+        payload && typeof payload.recordingAllowed === "boolean"
+          ? payload.recordingAllowed
+          : (prev.recordingAllowed ?? true),
     };
 
     peerProfiles.set(peerId, profile);
@@ -539,6 +558,20 @@ const VideoChat = (() => {
 
     conn.send(getSelfProfilePayload());
     lastProfileBroadcastAt.set(peerId, now);
+  }
+
+  function disableRecordingForCall(whoDeclined) {
+    const actorId = whoDeclined || "local";
+    const firstAlertForPeer = !nonConsentingPeers.has(actorId);
+    nonConsentingPeers.add(actorId);
+    if (!recordingAllowed && !firstAlertForPeer) return;
+
+    recordingAllowed = false;
+    state.recordingEnabled = false;
+    showToast(
+      `${getDisplayLabel(actorId)} did not consent to recording. Recording has been disabled for this call.`,
+      "warning"
+    );
   }
 
   function broadcastProfile(force = false) {
@@ -755,12 +788,12 @@ const VideoChat = (() => {
             t.enabled = !micMuted;
             ls.addTrack(t);
           });
-          
+
           let freshAudio = ls.getAudioTracks()[ls.getAudioTracks().length - 1];
           if (typeof VoiceChanger !== "undefined") {
             const processedAudio = VoiceChanger.init(ls);
             freshAudio = processedAudio.getAudioTracks()[0] || freshAudio;
-            
+
             const videoTrack = ls.getVideoTracks()[0];
             const tracks = [videoTrack, freshAudio].filter(Boolean);
             voiceStream = tracks.length ? new MediaStream(tracks) : ls;
@@ -776,12 +809,12 @@ const VideoChat = (() => {
             ls.addTrack(t);
           });
           const freshVideo = ls.getVideoTracks()[ls.getVideoTracks().length - 1];
-          
+
           if (voiceStream && voiceStream !== ls) {
-             const freshAudio = voiceStream.getAudioTracks()[0];
-             voiceStream = new MediaStream([freshVideo, freshAudio].filter(Boolean));
+            const freshAudio = voiceStream.getAudioTracks()[0];
+            voiceStream = new MediaStream([freshVideo, freshAudio].filter(Boolean));
           } else {
-             voiceStream = ls;
+            voiceStream = ls;
           }
 
           // Replace track in all active calls with the fresh video track.
@@ -920,12 +953,8 @@ const VideoChat = (() => {
         incomingCall.close();
         return;
       }
-      if (!consentGiven) {
-        const ok = await askConsent(incomingCall.peer);
-        if (!ok) {
-          incomingCall.close();
-          return;
-        }
+      if (!consentPromptHandled) {
+        await askConsent(incomingCall.peer);
       }
 
       const mediaOk = await startLocalMedia();
@@ -936,7 +965,7 @@ const VideoChat = (() => {
 
       activeCalls.set(incomingCall.peer, incomingCall);
       updateParticipantsList();
-      
+
       incomingCall.answer(voiceStream || localStream);
       handleCallStream(incomingCall);
       ensureDataConn(incomingCall.peer);
@@ -1253,6 +1282,9 @@ const VideoChat = (() => {
           typeof data.id === "string" && data.id.trim() ? data.id.trim() : conn.peer;
         if (incomingPeerId === conn.peer) {
           upsertRemoteProfile(conn.peer, data);
+          if (data.recordingAllowed === false) {
+            disableRecordingForCall(incomingPeerId);
+          }
         }
       }
     });
@@ -1262,6 +1294,7 @@ const VideoChat = (() => {
         activeDataConns.delete(conn.peer);
       }
       lastProfileBroadcastAt.delete(conn.peer);
+      nonConsentingPeers.delete(conn.peer);
     };
     conn.on("close", cleanup);
     conn.on("error", cleanup);
@@ -1363,9 +1396,8 @@ const VideoChat = (() => {
       return false;
     }
 
-    if (!consentGiven) {
-      const ok = await askConsent("the remote participant");
-      if (!ok) return false;
+    if (!consentPromptHandled) {
+      await askConsent("the remote participant");
     }
 
     const ok = await startLocalMedia();
@@ -1393,7 +1425,9 @@ const VideoChat = (() => {
         const pc = call.peerConnection;
         if (!pc) continue;
         if (typeof pc.getTransceivers === "function") {
-          const tr = pc.getTransceivers().find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
+          const tr = pc
+            .getTransceivers()
+            .find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
           sender = tr ? tr.sender : null;
         }
         if (!sender) {
@@ -1408,7 +1442,10 @@ const VideoChat = (() => {
           // Keep the cache fresh so subsequent toggles find the correct sender.
           if (call.sendersByKind) call.sendersByKind[kind] = sender;
         } catch (err) {
-          console.warn(`[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`, err);
+          console.warn(
+            `[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`,
+            err
+          );
         }
       }
     }
@@ -1629,12 +1666,14 @@ const VideoChat = (() => {
     updateParticipantsList();
     showToast("Call ended", "info");
     // Record consent end
-    ConsentManager &&
-      ConsentManager.record({
-        type: "recorded",
-        name: "Call session ended",
-        details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()}`,
-      });
+    if (recordingAllowed) {
+      ConsentManager &&
+        ConsentManager.record({
+          type: "recorded",
+          name: "Call session ended",
+          details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()}`,
+        });
+    }
     isEndingCall = false;
   }
 
@@ -1684,14 +1723,14 @@ const VideoChat = (() => {
     localSpeakingUntil = 0;
     setTileSpeakingIndicator("local", false);
     if (typeof VoiceChanger !== "undefined") VoiceChanger.destroy();
-    
+
     /* Reset monitor button state */
     const monitorBtn = $("btn-monitor");
     if (monitorBtn) {
       monitorBtn.classList.remove("active");
       monitorBtn.setAttribute("aria-pressed", "false");
     }
-    
+
     /* Reset voice mode buttons to normal, clear all per-effect slider rows */
     document.querySelectorAll("[data-voice-mode]").forEach((btn) => {
       const isNormal = btn.dataset.voiceMode === "normal";
@@ -1722,9 +1761,7 @@ const VideoChat = (() => {
       // sender's current track has been set to null by a mute cycle.
       let sender = call.sendersByKind ? call.sendersByKind["audio"] : null;
       if (!sender && call.peerConnection) {
-        sender = call.peerConnection
-          .getSenders()
-          .find((s) => s.track && s.track.kind === "audio");
+        sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "audio");
         if (sender && call.sendersByKind) call.sendersByKind["audio"] = sender;
       }
       if (sender) {
@@ -2072,7 +2109,7 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3 style="display:flex;align-items:center;gap:0.5rem"><i class="fa-solid fa-shield-halved text-primary" aria-hidden="true"></i>Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to recording with <strong id="consent-caller-name" style="color:#fff"></strong>? Declining still lets you join, but recording will be disabled for everyone.</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <i class="fa-solid fa-circle-info text-primary" aria-hidden="true"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
@@ -2088,7 +2125,7 @@ const VideoChat = (() => {
       document.body.appendChild(overlay);
 
       overlay.querySelector("#consent-allow").onclick = () => {
-        consentGiven = true;
+        consentPromptHandled = true;
         overlay.remove();
         ConsentManager &&
           ConsentManager.record({
@@ -2099,7 +2136,16 @@ const VideoChat = (() => {
         resolve(true);
       };
       overlay.querySelector("#consent-deny").onclick = () => {
+        consentPromptHandled = true;
         overlay.remove();
+        disableRecordingForCall("local");
+        broadcastProfile(true);
+        ConsentManager &&
+          ConsentManager.record({
+            type: "withdrawn",
+            name: "Recording consent declined",
+            details: `Session ID: ${state.sessionId}`,
+          });
         resolve(false);
       };
     });
@@ -2132,7 +2178,9 @@ const VideoChat = (() => {
         // Use cached sender reference (robust against null tracks)
         let sender = call.sendersByKind ? call.sendersByKind.video : null;
         if (!sender && call.peerConnection) {
-          sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
+          sender = call.peerConnection
+            .getSenders()
+            .find((s) => s.track && s.track.kind === "video");
         }
         if (sender) await sender.replaceTrack(screenTrack);
       }
@@ -2248,7 +2296,7 @@ const VideoChat = (() => {
     readInitialMediaPreferencesFromUrl();
     applyInitialMediaPreferences();
     updateLocalTilePresentation();
-    
+
     // Start media eagerly only when the initial preference explicitly enables mic/camera.
     if (initialMediaPreferences.mic || initialMediaPreferences.cam) {
       const ok = await startLocalMedia();
@@ -2261,7 +2309,7 @@ const VideoChat = (() => {
     _applyStoredVoicePreferences();
     syncRaiseHandButton();
     updateParticipantsList();
-    
+
     // Always init peer regardless of success of startLocalMedia (can join without media)
     await initPeer();
     checkInitialPermissions();
