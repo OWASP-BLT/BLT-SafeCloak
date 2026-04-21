@@ -424,6 +424,12 @@ def _accept_consent(page, timeout: int = TIMEOUT_MS):
     page.click("#consent-allow")
 
 
+def _decline_consent(page, timeout: int = TIMEOUT_MS):
+    """Wait for the consent dialog to appear and click 'Decline'."""
+    page.wait_for_selector("#consent-deny", timeout=timeout)
+    page.click("#consent-deny")
+
+
 _STREAM_CHECK_JS = """
 () => {
     const wrappers = Array.from(document.querySelectorAll('.video-wrapper'));
@@ -563,6 +569,55 @@ def test_room_url_persists_on_refresh_and_shared_link_joins_same_room(app_server
             )
             joiner_page.wait_for_function(
                 "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
+        finally:
+            browser.close()
+
+
+def test_declining_consent_still_allows_join_and_alerts_peers(app_server_url):
+    """Declining recording consent must not block joining and must disable recording for everyone."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            host_ctx = _new_context(browser)
+            joiner_ctx = _new_context(browser)
+            host_page = host_ctx.new_page()
+            joiner_page = joiner_ctx.new_page()
+
+            video_url = f"{app_server_url}/video-room?mic=on&cam=on"
+            host_page.goto(video_url)
+            joiner_page.goto(video_url)
+
+            host_id = _peer_id(host_page)
+            joiner_id = _peer_id(joiner_page)
+            assert host_id != joiner_id
+
+            joiner_page.fill("#remote-id", host_id)
+            joiner_page.click("#btn-call")
+            _decline_consent(joiner_page)
+            _accept_consent(host_page)
+
+            host_page.wait_for_function(
+                "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
+            joiner_page.wait_for_function(
+                "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
+
+            host_page.wait_for_function(
+                "() => typeof VideoChat !== 'undefined' && VideoChat.state.recordingEnabled === false",
+                timeout=TIMEOUT_MS,
+            )
+            joiner_page.wait_for_function(
+                "() => typeof VideoChat !== 'undefined' && VideoChat.state.recordingEnabled === false",
+                timeout=TIMEOUT_MS,
+            )
+            host_page.wait_for_function(
+                "() => Array.from(document.querySelectorAll('#toast-container .toast span:last-child'))"
+                ".some((el) => el.textContent.includes('did not consent to recording'))",
                 timeout=TIMEOUT_MS,
             )
         finally:
