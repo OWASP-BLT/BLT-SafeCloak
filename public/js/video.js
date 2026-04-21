@@ -2784,7 +2784,6 @@ const VideoChat = (() => {
     updateParticipantsList();
 
     /* Restore walkie-talkie mode from sessionStorage or URL param */
-    const params = new URLSearchParams(window.location.search);
     const isJoiningFromInvite = params.has("room");
     const walkieParam = params.get("walkie");
 
