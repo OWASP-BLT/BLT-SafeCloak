@@ -574,11 +574,11 @@
     <script src="js/video.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", async () => {
-        const roomIdRe = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
-        const normalizeRemoteId = (value) => (value || "").trim().toUpperCase();
+        const roomIdRe = /^.+$/;
+        const normalizeRemoteId = (value) => (value || "").trim();
         const params = new URLSearchParams(window.location.search);
         const inviteRoomId = normalizeRemoteId(params.get("room"));
-        const isJoiner = roomIdRe.test(inviteRoomId);
+        const isJoiner = inviteRoomId.length > 0;
         const addParticipantCard = document.getElementById("add-participant-card");
         if (isJoiner && addParticipantCard) {
           addParticipantCard.style.display = "none";

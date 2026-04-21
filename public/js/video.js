@@ -162,7 +162,7 @@ const VideoChat = (() => {
   }
 
   function normalizeRoomId(value) {
-    return (value || "").trim().toUpperCase();
+    return (value || "").trim();
   }
 
   function getInviteRoomIdFromUrl() {
@@ -207,6 +207,13 @@ const VideoChat = (() => {
     try {
       const url = new URL(window.location.href);
       const currentRoom = url.searchParams.get("room");
+      
+      /* Only set the room ID in the URL if it's missing or currently invalid.
+         This prevents joiners from overwriting the host's room ID with their transient peer ID. */
+      if (isValidRoomId(currentRoom) && currentRoom !== trimmedId) {
+        return;
+      }
+      
       if (currentRoom === trimmedId) return; // Already correct
       url.searchParams.set("room", trimmedId);
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -891,6 +898,7 @@ const VideoChat = (() => {
       return;
     }
     const inviteRoomId = getInviteRoomIdFromUrl();
+    state.inviteAutoJoinRoomId = inviteRoomId;
     state.peerId = shouldReuseInviteRoomAsPeerId(inviteRoomId) ? inviteRoomId : Crypto.randomId(6);
     persistOwnRoomId(state.peerId);
     state.sessionKey = await Crypto.generateKey();
@@ -1762,8 +1770,8 @@ const VideoChat = (() => {
   /* ── Input validation ── */
   function isValidRoomId(roomId) {
     if (!roomId || typeof roomId !== "string") return false;
-    // Match the same character set used by Crypto.randomId(): uppercase A-Z (except I,O) + digits 2-9
-    return /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(roomId);
+    /* Removed strict 6-char uppercase regex to support custom PeerJS servers and case-preservation */
+    return roomId.trim().length > 0;
   }
 
   async function autoJoinFromInvite(roomId) {
