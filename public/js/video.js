@@ -2000,6 +2000,7 @@ const VideoChat = (() => {
     const { navigateHome = true } = options;
 
     await endCall();
+    stopStatsMonitoring();
     if (peer) {
       try {
         peer.disconnect();
