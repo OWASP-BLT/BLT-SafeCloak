@@ -12,21 +12,15 @@ const VideoChat = (() => {
   let audioContext = null;
   let analyser = null;
   let voiceAnimFrame = null;
-  let micMuted = true;
-  let camOff = true;
-  let consentGiven = false;
-  let screenSharing = false;
-  let localHandRaised = false;
-  let inviteAutoJoinAttempted = false;
-  let inviteAutoJoinRoomId = "";
-  let initialMediaPreferences = { mic: false, cam: false };
   const MEDIA_PREFS_STORAGE_KEY = "blt-safecloak-media-preferences";
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const ROOM_ID_STORAGE_KEY = "blt-safecloak-room-id";
+  const WALKIE_STATE_STORAGE_KEY = "blt-safecloak-walkie-state";
   const PROFILE_BROADCAST_THROTTLE_MS = 220;
   const SPEAKING_THRESHOLD = 28;
   const SPEAKING_HOLD_MS = 260;
+  const MAX_VIDEO_PARTICIPANTS = 5;
 
   const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff, handRaised }
   const remoteSpeakingMonitors = new Map(); // peerId -> { analyser, data, source, activeUntil }
@@ -35,9 +29,6 @@ const VideoChat = (() => {
   let speakingAudioContext = null;
   let localSpeakingUntil = 0;
   const lastProfileBroadcastAt = new Map(); // peerId -> timestamp
-  let navigationInProgress = false;
-  let isEndingCall = false;
-  let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 3;
   const RECONNECT_BASE_DELAY_MS = 1000;
 
@@ -48,6 +39,23 @@ const VideoChat = (() => {
     sessionKey: null,
     displayName: "You",
     displayInitials: "YU",
+    micMuted: true,
+    camOff: true,
+    consentGiven: false,
+    screenSharing: false,
+    localHandRaised: false,
+    inviteAutoJoinAttempted: false,
+    inviteAutoJoinRoomId: "",
+    initialMediaPreferences: { mic: false, cam: false },
+    navigationInProgress: false,
+    isEndingCall: false,
+    reconnectAttempts: 0,
+    /* ── Walkie-talkie mode state ── */
+    walkieTalkieMode: false,
+    walkieEnforced: false,
+    floorOwner: null, // peerId of current speaker, null = floor free
+    pttActive: false, // true while local user holds PTT button
+    walkiePromptPending: false, // prevents duplicate prompts
   };
 
   /* ── DOM helpers ── */
@@ -69,8 +77,8 @@ const VideoChat = (() => {
   }
 
   function navigateToHome() {
-    if (navigationInProgress) return;
-    navigationInProgress = true;
+    if (state.navigationInProgress) return;
+    state.navigationInProgress = true;
     try {
       window.location.assign("/");
     } catch {
@@ -116,7 +124,9 @@ const VideoChat = (() => {
     }
 
     try {
-      const fromStorage = normalizeDisplayName(window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY));
+      const fromStorage = normalizeDisplayName(
+        window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY)
+      );
       if (fromStorage) return fromStorage;
     } catch {
       /* ignore storage failures */
@@ -130,9 +140,9 @@ const VideoChat = (() => {
       return {
         name: state.displayName,
         initials: state.displayInitials,
-        micMuted: isLocalMicMutedState(),
-        camOff: isLocalCamOffState(),
-        handRaised: localHandRaised,
+        micMuted: state.micMuted,
+        camOff: state.camOff,
+        handRaised: state.localHandRaised,
       };
     }
     const profile = peerProfiles.get(peerId);
@@ -215,21 +225,21 @@ const VideoChat = (() => {
       id: state.peerId,
       name: state.displayName,
       initials: state.displayInitials,
-      micMuted: isLocalMicMutedState(),
-      camOff: screenSharing ? false : isLocalCamOffState(),
-      handRaised: localHandRaised,
+      micMuted: state.micMuted,
+      camOff: state.screenSharing ? false : state.camOff,
+      handRaised: state.localHandRaised,
     };
   }
 
   function isLocalMicMutedState() {
     const hasAudioTrack = Boolean(localStream && localStream.getAudioTracks().length);
-    return !hasAudioTrack || micMuted;
+    return !hasAudioTrack || state.micMuted;
   }
 
   function isLocalCamOffState() {
-    if (screenSharing) return false;
+    if (state.screenSharing) return false;
     const hasVideoTrack = Boolean(localStream && localStream.getVideoTracks().length);
-    return !hasVideoTrack || camOff;
+    return !hasVideoTrack || state.camOff;
   }
 
   function setAvatarVisibility(avatarEl, visible) {
@@ -256,7 +266,8 @@ const VideoChat = (() => {
       stateCam:
         wrapper.querySelector('[data-state="cam"]') || (isLocal ? $("state-icon-local-cam") : null),
       labelName:
-        wrapper.querySelector('[data-role="label-name"]') || (isLocal ? $("label-local-name") : null),
+        wrapper.querySelector('[data-role="label-name"]') ||
+        (isLocal ? $("label-local-name") : null),
     };
   }
 
@@ -374,8 +385,8 @@ const VideoChat = (() => {
     const profile = getProfileForPeer(peerId);
     const displayName = isLocal ? state.displayName : profile.name;
     const initials = profile.initials || makeInitials(displayName);
-    const micIsMuted = isLocal ? isLocalMicMutedState() : Boolean(profile.micMuted);
-    const cameraIsOff = isLocal ? isLocalCamOffState() : Boolean(profile.camOff);
+    const micIsMuted = isLocal ? state.micMuted : Boolean(profile.micMuted);
+    const cameraIsOff = isLocal ? state.camOff : Boolean(profile.camOff);
 
     if (tile.dot) {
       tile.dot.className = `status-dot ${isLocal || activeCalls.has(peerId) ? "online" : "connecting"}`;
@@ -385,7 +396,10 @@ const VideoChat = (() => {
       tile.labelName.title = displayName;
     }
     if (tile.video) {
-      tile.video.setAttribute("aria-label", isLocal ? "Your video" : `Participant ${displayName} video`);
+      tile.video.setAttribute(
+        "aria-label",
+        isLocal ? "Your video" : `Participant ${displayName} video`
+      );
     }
     if (tile.avatarInitials) {
       tile.avatarInitials.textContent = initials;
@@ -430,7 +444,9 @@ const VideoChat = (() => {
   }
 
   function stopAllRemoteSpeakingMonitors() {
-    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) => stopRemoteSpeakingMonitor(peerId));
+    Array.from(remoteSpeakingMonitors.keys()).forEach((peerId) =>
+      stopRemoteSpeakingMonitor(peerId)
+    );
     if (speakingLoopFrame) {
       cancelAnimationFrame(speakingLoopFrame);
       speakingLoopFrame = null;
@@ -514,8 +530,11 @@ const VideoChat = (() => {
       name: normalizedName || prev.name,
       initials: makeInitials(normalizedName || prev.name),
       micMuted:
-        payload && typeof payload.micMuted === "boolean" ? payload.micMuted : Boolean(prev.micMuted),
-      camOff: payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
+        payload && typeof payload.micMuted === "boolean"
+          ? payload.micMuted
+          : Boolean(prev.micMuted),
+      camOff:
+        payload && typeof payload.camOff === "boolean" ? payload.camOff : Boolean(prev.camOff),
       handRaised:
         payload && typeof payload.handRaised === "boolean"
           ? payload.handRaised
@@ -657,49 +676,49 @@ const VideoChat = (() => {
       // Disable only when the device is genuinely unavailable: user wants mic on
       // but there is no track. When micMuted=true the track was intentionally
       // stopped — keep the button enabled so the user can re-enable.
-      const micUnavailable = !hasAudioTrack && !micMuted;
+      const micUnavailable = !hasAudioTrack && !state.micMuted;
       if (micUnavailable) {
         micBtn.innerHTML = '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>';
-        micBtn.title = micMuted ? "Unmute mic" : "Mute mic";
+        micBtn.title = state.micMuted ? "Unmute mic" : "Mute mic";
         micBtn.disabled = false;
         micBtn.classList.remove("opacity-50", "cursor-not-allowed");
       } else {
-        micBtn.innerHTML = micMuted
+        micBtn.innerHTML = state.micMuted
           ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>'
           : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
-        micBtn.title = micMuted ? "Unmute mic" : "Mute mic";
+        micBtn.title = state.micMuted ? "Unmute mic" : "Mute mic";
         micBtn.disabled = false;
         micBtn.classList.remove("opacity-50", "cursor-not-allowed");
       }
-      micBtn.setAttribute("aria-pressed", micMuted ? "true" : "false");
-      micBtn.classList.toggle("active", micMuted);
+      micBtn.setAttribute("aria-pressed", state.micMuted ? "true" : "false");
+      micBtn.classList.toggle("active", state.micMuted);
     }
 
     const camBtn = $("btn-cam");
     if (camBtn) {
       // Same logic: disable only when user wants cam on but no track exists.
-      const camUnavailable = !hasVideoTrack && !camOff;
+      const camUnavailable = !hasVideoTrack && !state.camOff;
       if (camUnavailable) {
         camBtn.innerHTML = '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>';
-        camBtn.title = camOff ? "Enable camera" : "Disable camera";
+        camBtn.title = state.camOff ? "Enable camera" : "Disable camera";
         camBtn.disabled = false;
         camBtn.classList.remove("opacity-50", "cursor-not-allowed");
       } else {
-        camBtn.innerHTML = camOff
+        camBtn.innerHTML = state.camOff
           ? '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>'
           : '<i class="fa-solid fa-video" aria-hidden="true"></i>';
-        camBtn.title = camOff ? "Enable camera" : "Disable camera";
+        camBtn.title = state.camOff ? "Enable camera" : "Disable camera";
         camBtn.disabled = false;
         camBtn.classList.remove("opacity-50", "cursor-not-allowed");
       }
-      camBtn.setAttribute("aria-pressed", camOff ? "true" : "false");
-      camBtn.classList.toggle("active", camOff);
+      camBtn.setAttribute("aria-pressed", state.camOff ? "true" : "false");
+      camBtn.classList.toggle("active", state.camOff);
     }
   }
 
   function applyInitialMediaPreferences() {
-    micMuted = !initialMediaPreferences.mic;
-    camOff = !initialMediaPreferences.cam;
+    state.micMuted = !state.initialMediaPreferences.mic;
+    state.camOff = !state.initialMediaPreferences.cam;
 
     if (!localStream) {
       syncControlButtons();
@@ -711,10 +730,10 @@ const VideoChat = (() => {
     const hasVideoTrack = localStream.getVideoTracks().length > 0;
 
     if (hasAudioTrack) {
-      localStream.getAudioTracks().forEach((track) => (track.enabled = !micMuted));
+      localStream.getAudioTracks().forEach((track) => (track.enabled = !state.micMuted));
     }
     if (hasVideoTrack) {
-      localStream.getVideoTracks().forEach((track) => (track.enabled = !camOff));
+      localStream.getVideoTracks().forEach((track) => (track.enabled = !state.camOff));
     }
 
     syncControlButtons();
@@ -752,15 +771,15 @@ const VideoChat = (() => {
 
         if (constraints.audio && stream.getAudioTracks().length > 0) {
           stream.getAudioTracks().forEach((t) => {
-            t.enabled = !micMuted;
+            t.enabled = !state.micMuted;
             ls.addTrack(t);
           });
-          
+
           let freshAudio = ls.getAudioTracks()[ls.getAudioTracks().length - 1];
           if (typeof VoiceChanger !== "undefined") {
             const processedAudio = VoiceChanger.init(ls);
             freshAudio = processedAudio.getAudioTracks()[0] || freshAudio;
-            
+
             const videoTrack = ls.getVideoTracks()[0];
             const tracks = [videoTrack, freshAudio].filter(Boolean);
             voiceStream = tracks.length ? new MediaStream(tracks) : ls;
@@ -772,16 +791,16 @@ const VideoChat = (() => {
         }
         if (constraints.video && stream.getVideoTracks().length > 0) {
           stream.getVideoTracks().forEach((t) => {
-            t.enabled = !camOff;
+            t.enabled = !state.camOff;
             ls.addTrack(t);
           });
           const freshVideo = ls.getVideoTracks()[ls.getVideoTracks().length - 1];
-          
+
           if (voiceStream && voiceStream !== ls) {
-             const freshAudio = voiceStream.getAudioTracks()[0];
-             voiceStream = new MediaStream([freshVideo, freshAudio].filter(Boolean));
+            const freshAudio = voiceStream.getAudioTracks()[0];
+            voiceStream = new MediaStream([freshVideo, freshAudio].filter(Boolean));
           } else {
-             voiceStream = ls;
+            voiceStream = ls;
           }
 
           // Replace track in all active calls with the fresh video track.
@@ -874,6 +893,13 @@ const VideoChat = (() => {
     state.sessionKey = await Crypto.generateKey();
     state.sessionId = state.peerId;
 
+    /* Check for walkie enforcement from URL */
+    const params = new URLSearchParams(window.location.search);
+    state.walkieEnforced = params.get("walkie") === "1";
+    if (state.walkieEnforced) {
+      activateWalkieTalkieMode(true);
+    }
+
     peer = new Peer(
       state.peerId,
       Object.assign(
@@ -889,7 +915,7 @@ const VideoChat = (() => {
     );
 
     peer.on("open", (id) => {
-      reconnectAttempts = 0;
+      state.reconnectAttempts = 0;
       $("my-peer-id") && ($("my-peer-id").textContent = id);
       persistOwnRoomId(id);
       ensureRoomIdInUrl(id);
@@ -898,7 +924,7 @@ const VideoChat = (() => {
       updateLocalTilePresentation();
       updateParticipantsList();
       showToast("Connected to signaling server", "success");
-      const inviteRoomId = inviteAutoJoinRoomId || getInviteRoomIdFromUrl();
+      const inviteRoomId = state.inviteAutoJoinRoomId || getInviteRoomIdFromUrl();
       // Skip auto-join when this tab is the host for the room ID in the URL.
       if (!inviteRoomId || inviteRoomId === id) {
         return;
@@ -920,7 +946,16 @@ const VideoChat = (() => {
         incomingCall.close();
         return;
       }
-      if (!consentGiven) {
+
+      /* Enforce participant limit — prompt before exceeding 5 */
+      const limitOk = await checkParticipantLimit();
+      if (!limitOk) {
+        showToast("Room is full. Join as a listener or switch to walkie-talkie mode.", "warning");
+        incomingCall.close();
+        return;
+      }
+
+      if (!state.consentGiven) {
         const ok = await askConsent(incomingCall.peer);
         if (!ok) {
           incomingCall.close();
@@ -936,7 +971,8 @@ const VideoChat = (() => {
 
       activeCalls.set(incomingCall.peer, incomingCall);
       updateParticipantsList();
-      
+      updateParticipantModeHint();
+
       incomingCall.answer(voiceStream || localStream);
       handleCallStream(incomingCall);
       ensureDataConn(incomingCall.peer);
@@ -954,24 +990,37 @@ const VideoChat = (() => {
     });
 
     peer.on("disconnected", () => {
-      if (peer.destroyed || isEndingCall) {
+      if (peer.destroyed || state.isEndingCall) {
         updateStatus("fa-solid fa-plug-circle-xmark", "Disconnected", "warning");
         setStatusIcon("offline");
         return;
       }
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1);
-        updateStatus("fa-solid fa-arrows-rotate fa-spin", `Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…`, "warning");
+      if (state.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        state.reconnectAttempts++;
+        const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, state.reconnectAttempts - 1);
+        updateStatus(
+          "fa-solid fa-arrows-rotate fa-spin",
+          `Reconnecting (${state.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…`,
+          "warning"
+        );
         setStatusIcon("offline");
         const currentPeer = peer;
         setTimeout(() => {
-          if (currentPeer === peer && !isEndingCall && !currentPeer.destroyed && !currentPeer.open) {
+          if (
+            currentPeer === peer &&
+            !state.isEndingCall &&
+            !currentPeer.destroyed &&
+            !currentPeer.open
+          ) {
             currentPeer.reconnect();
           }
         }, delay);
       } else {
-        updateStatus("fa-solid fa-plug-circle-xmark", "Disconnected — could not reconnect", "danger");
+        updateStatus(
+          "fa-solid fa-plug-circle-xmark",
+          "Disconnected — could not reconnect",
+          "danger"
+        );
         setStatusIcon("offline");
         showToast("Lost connection to signaling server. Please rejoin.", "error");
       }
@@ -1019,7 +1068,7 @@ const VideoChat = (() => {
     localNameText.textContent = `${state.displayName} (You)`;
     localNameLabel.appendChild(localNameText);
 
-    if (localHandRaised) {
+    if (state.localHandRaised) {
       const hand = document.createElement("span");
       hand.textContent = "✋";
       hand.className = "leading-none";
@@ -1090,10 +1139,14 @@ const VideoChat = (() => {
       const isMuted = mutedPeers.has(peerId);
       muteBtn.className = "control-btn participant-mute-btn";
       muteBtn.style.cssText = "width:32px;height:32px;font-size:0.75rem";
-      muteBtn.title = isMuted ? `Unmute ${getDisplayLabel(peerId)}` : `Mute ${getDisplayLabel(peerId)}`;
+      muteBtn.title = isMuted
+        ? `Unmute ${getDisplayLabel(peerId)}`
+        : `Mute ${getDisplayLabel(peerId)}`;
       muteBtn.setAttribute("aria-label", muteBtn.title);
       muteBtn.setAttribute("aria-pressed", String(isMuted));
-      muteBtn.innerHTML = isMuted ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>' : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
+      muteBtn.innerHTML = isMuted
+        ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>'
+        : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
       muteBtn.addEventListener("click", () => {
         if (typeof window.toggleParticipantMute === "function") {
           window.toggleParticipantMute(peerId);
@@ -1124,17 +1177,421 @@ const VideoChat = (() => {
   function syncRaiseHandButton() {
     const handBtn = $("btn-hand");
     if (!handBtn) return;
-    handBtn.classList.toggle("active", localHandRaised);
-    handBtn.setAttribute("aria-pressed", localHandRaised ? "true" : "false");
-    handBtn.title = localHandRaised ? "Lower hand" : "Raise hand";
+    handBtn.classList.toggle("active", state.localHandRaised);
+    handBtn.setAttribute("aria-pressed", state.localHandRaised ? "true" : "false");
+    handBtn.title = state.localHandRaised ? "Lower hand" : "Raise hand";
   }
 
   function toggleRaiseHand() {
-    localHandRaised = !localHandRaised;
+    state.localHandRaised = !state.localHandRaised;
     syncRaiseHandButton();
     updateParticipantsList();
     broadcastProfile(true);
-    showToast(localHandRaised ? "Hand raised" : "Hand lowered", "info");
+    showToast(state.localHandRaised ? "Hand raised" : "Hand lowered", "info");
+  }
+
+  /* ── Walkie-talkie mode ── */
+
+  function persistWalkieState() {
+    try {
+      window.sessionStorage.setItem(
+        WALKIE_STATE_STORAGE_KEY,
+        JSON.stringify({ walkieTalkieMode: state.walkieTalkieMode, micMuted: state.micMuted, camOff: state.camOff })
+      );
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function restoreWalkieState() {
+    try {
+      const raw = window.sessionStorage.getItem(WALKIE_STATE_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved && typeof saved === "object") {
+        if (saved.walkieTalkieMode) {
+          activateWalkieTalkieMode(true);
+        } else {
+          /* Explicitly ensure we're in video mode if saved state is false */
+          deactivateWalkieTalkieMode();
+        }
+      }
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function readWalkiePreferenceFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("walkie") === "1";
+  }
+
+  function getParticipantCount() {
+    const isPeerReady = Boolean(peer && peer.open && state.peerId);
+    return activeCalls.size + (isPeerReady ? 1 : 0);
+  }
+
+  function updateParticipantModeHint() {
+    const hintEl = $("participant-mode-hint");
+    if (!hintEl) return;
+    const count = getParticipantCount();
+    if (state.walkieTalkieMode) {
+      hintEl.textContent = `Walkie-Talkie Mode \u2014 Audio only, push-to-talk (${count} participant${count !== 1 ? "s" : ""})`;
+      hintEl.className = "mt-1 text-xs font-semibold text-amber-600";
+    } else {
+      hintEl.textContent = `Full video chat \u2014 up to ${MAX_VIDEO_PARTICIPANTS} participants (${count} now)`;
+      hintEl.className = "mt-1 text-xs text-gray-500";
+    }
+  }
+
+  function activateWalkieTalkieMode(silent = false) {
+    if (state.walkieTalkieMode) return;
+    state.walkieTalkieMode = true;
+    state.floorOwner = null;
+    state.pttActive = false;
+
+    /* Hide video-related UI */
+    const videoGrid = $("video-grid");
+    const btnCam = $("btn-cam");
+    const btnScreen = $("btn-screen");
+    const btnPtt = $("btn-ptt");
+    const floorBanner = $("floor-cue-banner");
+
+    if (videoGrid) videoGrid.style.display = "none";
+    if (btnCam) btnCam.style.display = "none";
+    if (btnScreen) btnScreen.style.display = "none";
+    if (btnPtt) {
+      btnPtt.classList.remove("hidden");
+      btnPtt.style.display = "";
+      btnPtt.classList.add("ptt-ready");
+    }
+    if (floorBanner) floorBanner.classList.remove("hidden");
+
+    /* Stop local video tracks to save bandwidth */
+    if (localStream) {
+      localStream.getVideoTracks().forEach((t) => {
+        t.stop();
+        localStream.removeTrack(t);
+      });
+    }
+    state.camOff = true;
+
+    /* Mute mic by default — PTT controls speaking */
+    if (localStream) {
+      localStream.getAudioTracks().forEach((t) => (t.enabled = false));
+    }
+    state.micMuted = true;
+
+    updateFloorCueBanner();
+    updateParticipantModeHint();
+    syncControlButtons();
+    updateLocalTilePresentation();
+    persistWalkieState();
+    setupPTTHandlers();
+
+    if (!silent) {
+      showToast("Walkie-Talkie Mode activated \u2014 push to talk", "info");
+    }
+
+    /* Broadcast mode to all peers */
+    broadcastFloorMessage({ type: "walkie-mode-sync", enabled: true });
+  }
+
+  function deactivateWalkieTalkieMode() {
+    if (!state.walkieTalkieMode) return;
+    state.walkieTalkieMode = false;
+    state.floorOwner = null;
+    state.pttActive = false;
+
+    /* Show video-related UI */
+    const videoGrid = $("video-grid");
+    const btnCam = $("btn-cam");
+    const btnScreen = $("btn-screen");
+    const btnPtt = $("btn-ptt");
+    const floorBanner = $("floor-cue-banner");
+
+    if (videoGrid) videoGrid.style.display = "";
+    if (btnCam) btnCam.style.display = "";
+    if (btnScreen) btnScreen.style.display = "";
+    if (btnPtt) {
+      btnPtt.classList.add("hidden");
+      btnPtt.classList.remove("ptt-ready", "ptt-speaking");
+    }
+    if (floorBanner) floorBanner.classList.add("hidden");
+
+    removePTTHandlers();
+    updateParticipantModeHint();
+    syncControlButtons();
+    updateLocalTilePresentation();
+    persistWalkieState();
+    showToast("Walkie-Talkie Mode deactivated \u2014 full video restored", "info");
+
+    /* Broadcast mode to all peers */
+    broadcastFloorMessage({ type: "walkie-mode-sync", enabled: false });
+  }
+
+  /**
+   * Check if participant limit is exceeded and prompt user to switch to walkie-talkie.
+   * Returns true if the call should proceed, false if it should be blocked.
+   */
+  async function checkParticipantLimit() {
+    /* If already in walkie mode or enforcement is active, we don't need a limit prompt */
+    if (state.walkieTalkieMode || state.walkieEnforced) return true;
+
+    const count = getParticipantCount();
+    if (count < MAX_VIDEO_PARTICIPANTS) return true;
+
+    if (state.walkiePromptPending) return false;
+    state.walkiePromptPending = true;
+
+    try {
+      const proceed = await showWalkiePrompt(count);
+      if (proceed) {
+        activateWalkieTalkieMode();
+        return true;
+      }
+      return false;
+    } finally {
+      state.walkiePromptPending = false;
+    }
+  }
+
+  function showWalkiePrompt(count) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      overlay.style.display = "flex";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:480px">
+          <h3 style="display:flex;align-items:center;gap:0.5rem">
+            <i class="fa-solid fa-users text-amber-500" aria-hidden="true"></i>
+            Room Capacity Reached
+          </h3>
+          <p>This room has <strong>${count} participants</strong>. Full-mesh video supports a maximum of <strong>${MAX_VIDEO_PARTICIPANTS}</strong>.</p>
+          <div class="alert alert-info" style="margin-bottom:1rem">
+            <i class="fa-solid fa-walkie-talkie text-primary" aria-hidden="true"></i>
+            <span>Switch to <strong>Walkie-Talkie Mode</strong> for audio-only with push-to-talk. This scales to large rooms while keeping things stable.</span>
+          </div>
+          <div style="display:flex;gap:0.75rem;justify-content:flex-end">
+            <button class="btn btn-secondary" id="walkie-prompt-cancel">Stay in Video</button>
+            <button class="btn btn-primary" id="walkie-prompt-accept">
+              <i class="fa-solid fa-walkie-talkie" aria-hidden="true"></i>
+              Switch to Walkie-Talkie
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      overlay.querySelector("#walkie-prompt-accept").onclick = () => {
+        overlay.remove();
+        resolve(true);
+      };
+      overlay.querySelector("#walkie-prompt-cancel").onclick = () => {
+        overlay.remove();
+        resolve(false);
+      };
+    });
+  }
+
+  /* ── Floor control ── */
+
+  function broadcastFloorMessage(payload) {
+    activeDataConns.forEach((conn) => {
+      if (conn.open) {
+        try {
+          conn.send(payload);
+        } catch {
+          /* ignore send failures */
+        }
+      }
+    });
+  }
+
+  function requestFloor() {
+    if (!state.walkieTalkieMode || state.pttActive) return;
+    if (state.floorOwner && state.floorOwner !== state.peerId) {
+      showToast("Wait for the floor to be released", "warning");
+      return;
+    }
+
+    state.pttActive = true;
+    state.floorOwner = state.peerId;
+
+    /* Unmute local audio */
+    if (localStream) {
+      localStream.getAudioTracks().forEach((t) => (t.enabled = true));
+    }
+    state.micMuted = false;
+    syncControlButtons();
+    broadcastProfile(true);
+
+    /* Notify peers */
+    broadcastFloorMessage({
+      type: "floor-taken",
+      peerId: state.peerId,
+      name: state.displayName,
+    });
+
+    updateFloorCueBanner();
+    updatePTTButtonState();
+  }
+
+  function releaseFloor() {
+    if (!state.walkieTalkieMode || !state.pttActive) return;
+
+    state.pttActive = false;
+    state.floorOwner = null;
+
+    /* Mute local audio */
+    if (localStream) {
+      localStream.getAudioTracks().forEach((t) => (t.enabled = false));
+    }
+    state.micMuted = true;
+    syncControlButtons();
+    broadcastProfile(true);
+
+    /* Notify peers */
+    broadcastFloorMessage({
+      type: "floor-released",
+      peerId: state.peerId,
+    });
+
+    updateFloorCueBanner();
+    updatePTTButtonState();
+  }
+
+  function handleFloorMessage(data) {
+    if (!data || !data.type) return false;
+
+    if (data.type === "floor-taken") {
+      state.floorOwner = data.peerId || null;
+      updateFloorCueBanner();
+      updatePTTButtonState();
+      return true;
+    }
+
+    if (data.type === "floor-released") {
+      if (state.floorOwner === data.peerId) {
+        state.floorOwner = null;
+      }
+      updateFloorCueBanner();
+      updatePTTButtonState();
+      return true;
+    }
+
+    if (data.type === "walkie-mode-sync") {
+      /* A peer entered/exited walkie mode — informational only */
+      return true;
+    }
+
+    return false;
+  }
+
+  function updateFloorCueBanner() {
+    const banner = $("floor-cue-banner");
+    const icon = $("floor-cue-icon");
+    const text = $("floor-cue-text");
+    if (!banner) return;
+
+    if (!state.walkieTalkieMode) {
+      banner.classList.add("hidden");
+      return;
+    }
+
+    banner.classList.remove("hidden", "floor-free", "floor-self", "floor-taken");
+
+    if (!state.floorOwner) {
+      banner.classList.add("floor-free");
+      if (icon) icon.innerHTML = '<i class="fa-solid fa-circle-dot" aria-hidden="true"></i>';
+      if (text) text.textContent = "Floor is free \u2014 Hold the Talk button to speak";
+    } else if (state.floorOwner === state.peerId) {
+      banner.classList.add("floor-self");
+      if (icon) icon.innerHTML = '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
+      if (text) text.textContent = "You have the floor \u2014 Release the button when done";
+    } else {
+      banner.classList.add("floor-taken");
+      const speakerName = getDisplayLabel(state.floorOwner);
+      if (icon) icon.innerHTML = '<i class="fa-solid fa-volume-high" aria-hidden="true"></i>';
+      if (text)
+        text.textContent = `${speakerName} is speaking \u2014 Wait for the floor to be released`;
+    }
+  }
+
+  function updatePTTButtonState() {
+    const btnPtt = $("btn-ptt");
+    if (!btnPtt) return;
+
+    btnPtt.classList.remove("ptt-ready", "ptt-speaking", "ptt-disabled");
+
+    if (!state.walkieTalkieMode) return;
+
+    if (state.pttActive && state.floorOwner === state.peerId) {
+      btnPtt.classList.add("ptt-speaking");
+      btnPtt.title = "Release to stop speaking";
+    } else if (state.floorOwner && state.floorOwner !== state.peerId) {
+      btnPtt.classList.add("ptt-disabled");
+      btnPtt.title = "Someone else is speaking";
+    } else {
+      btnPtt.classList.add("ptt-ready");
+      btnPtt.title = "Hold to speak";
+    }
+  }
+
+  /* ── PTT event handlers ── */
+
+  let _pttKeyDown = false;
+
+  function _handlePTTPointerDown(e) {
+    e.preventDefault();
+    requestFloor();
+  }
+
+  function _handlePTTPointerUp(e) {
+    e.preventDefault();
+    releaseFloor();
+  }
+
+  function _handlePTTKeyDown(e) {
+    if (e.key !== " " && e.key !== "Space") return;
+    if (_pttKeyDown) return; // prevent key repeat
+    _pttKeyDown = true;
+    e.preventDefault();
+    requestFloor();
+  }
+
+  function _handlePTTKeyUp(e) {
+    if (e.key !== " " && e.key !== "Space") return;
+    _pttKeyDown = false;
+    e.preventDefault();
+    releaseFloor();
+  }
+
+  function setupPTTHandlers() {
+    const btnPtt = $("btn-ptt");
+    if (!btnPtt) return;
+
+    btnPtt.addEventListener("pointerdown", _handlePTTPointerDown);
+    btnPtt.addEventListener("pointerup", _handlePTTPointerUp);
+    btnPtt.addEventListener("pointerleave", _handlePTTPointerUp);
+    btnPtt.addEventListener("pointercancel", _handlePTTPointerUp);
+
+    /* Global keyboard handler for Space key */
+    document.addEventListener("keydown", _handlePTTKeyDown);
+    document.addEventListener("keyup", _handlePTTKeyUp);
+  }
+
+  function removePTTHandlers() {
+    const btnPtt = $("btn-ptt");
+    if (btnPtt) {
+      btnPtt.removeEventListener("pointerdown", _handlePTTPointerDown);
+      btnPtt.removeEventListener("pointerup", _handlePTTPointerUp);
+      btnPtt.removeEventListener("pointerleave", _handlePTTPointerUp);
+      btnPtt.removeEventListener("pointercancel", _handlePTTPointerUp);
+    }
+    document.removeEventListener("keydown", _handlePTTKeyDown);
+    document.removeEventListener("keyup", _handlePTTKeyUp);
+    _pttKeyDown = false;
   }
 
   function handleCallStream(call) {
@@ -1198,10 +1655,18 @@ const VideoChat = (() => {
       lastProfileBroadcastAt.delete(remotePeerId);
       const wrapper = $(`wrapper-${remotePeerId}`);
       if (wrapper) wrapper.remove();
+
+      /* Auto-release floor if the owner departed */
+      if (state.walkieTalkieMode && state.floorOwner === remotePeerId) {
+        state.floorOwner = null;
+        updateFloorCueBanner();
+        updatePTTButtonState();
+      }
+
       if (activeCalls.size === 0) {
         state.connected = false;
         // Only show remote-disconnect UI if this is not a local teardown
-        if (!isEndingCall) {
+        if (!state.isEndingCall) {
           updateStatus("fa-solid fa-phone-slash", "Call ended", "muted");
           setStatusIcon("offline");
           if ($("call-controls")) {
@@ -1238,6 +1703,11 @@ const VideoChat = (() => {
     });
 
     conn.on("data", (data) => {
+      /* Floor control messages (walkie-talkie mode) */
+      if (data && handleFloorMessage(data)) {
+        return;
+      }
+
       if (data && data.type === "peers" && Array.isArray(data.ids)) {
         data.ids.forEach((id) => {
           const peerId = typeof id === "string" ? id.trim() : "";
@@ -1302,7 +1772,7 @@ const VideoChat = (() => {
     populateRemoteIdInput(normalizedRoomId);
 
     if (!peer || !state.peerId) {
-      inviteAutoJoinRoomId = normalizedRoomId;
+      state.inviteAutoJoinRoomId = normalizedRoomId;
       return false;
     }
 
@@ -1312,17 +1782,17 @@ const VideoChat = (() => {
     }
 
     if (activeCalls.has(normalizedRoomId)) {
-      inviteAutoJoinAttempted = true;
-      inviteAutoJoinRoomId = normalizedRoomId;
+      state.inviteAutoJoinAttempted = true;
+      state.inviteAutoJoinRoomId = normalizedRoomId;
       return true;
     }
 
-    if (inviteAutoJoinAttempted && inviteAutoJoinRoomId === normalizedRoomId) {
+    if (state.inviteAutoJoinAttempted && state.inviteAutoJoinRoomId === normalizedRoomId) {
       return false;
     }
 
-    inviteAutoJoinAttempted = true;
-    inviteAutoJoinRoomId = normalizedRoomId;
+    state.inviteAutoJoinAttempted = true;
+    state.inviteAutoJoinRoomId = normalizedRoomId;
     showToast("Joining room from invite link...", "info");
     await callPeer(normalizedRoomId);
     return true;
@@ -1363,9 +1833,21 @@ const VideoChat = (() => {
       return false;
     }
 
-    if (!consentGiven) {
+    if (!state.consentGiven) {
       const ok = await askConsent("the remote participant");
       if (!ok) return false;
+    }
+
+    /* Enforce participant limit — prompt before exceeding 5 */
+    const limitOk = await checkParticipantLimit();
+    if (!limitOk) {
+      showToast(
+        "Room is full (max " +
+          MAX_VIDEO_PARTICIPANTS +
+          " video participants). Switch to walkie-talkie mode to continue.",
+        "warning"
+      );
+      return false;
     }
 
     const ok = await startLocalMedia();
@@ -1376,6 +1858,7 @@ const VideoChat = (() => {
     const call = peer.call(remotePeerId, voiceStream || localStream);
     activeCalls.set(remotePeerId, call);
     updateParticipantsList();
+    updateParticipantModeHint();
     handleCallStream(call);
     ensureDataConn(remotePeerId);
     return true;
@@ -1393,7 +1876,9 @@ const VideoChat = (() => {
         const pc = call.peerConnection;
         if (!pc) continue;
         if (typeof pc.getTransceivers === "function") {
-          const tr = pc.getTransceivers().find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
+          const tr = pc
+            .getTransceivers()
+            .find((t) => t.receiver && t.receiver.track && t.receiver.track.kind === kind);
           sender = tr ? tr.sender : null;
         }
         if (!sender) {
@@ -1408,7 +1893,10 @@ const VideoChat = (() => {
           // Keep the cache fresh so subsequent toggles find the correct sender.
           if (call.sendersByKind) call.sendersByKind[kind] = sender;
         } catch (err) {
-          console.warn(`[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`, err);
+          console.warn(
+            `[VideoChat] replaceTrack failed for kind=${kind} on peer=${call.peer}:`,
+            err
+          );
         }
       }
     }
@@ -1417,21 +1905,21 @@ const VideoChat = (() => {
   function updateMediaButtons() {
     const micBtn = $("btn-mic");
     if (micBtn) {
-      micBtn.innerHTML = micMuted
+      micBtn.innerHTML = state.micMuted
         ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>'
         : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
-      micBtn.title = micMuted ? "Unmute mic" : "Mute mic";
-      micBtn.classList.toggle("active", micMuted);
-      micBtn.setAttribute("aria-pressed", micMuted ? "true" : "false");
+      micBtn.title = state.micMuted ? "Unmute mic" : "Mute mic";
+      micBtn.classList.toggle("active", state.micMuted);
+      micBtn.setAttribute("aria-pressed", state.micMuted ? "true" : "false");
     }
     const camBtn = $("btn-cam");
     if (camBtn) {
-      camBtn.innerHTML = camOff
+      camBtn.innerHTML = state.camOff
         ? '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>'
         : '<i class="fa-solid fa-video" aria-hidden="true"></i>';
-      camBtn.title = camOff ? "Enable camera" : "Disable camera";
-      camBtn.classList.toggle("active", camOff);
-      camBtn.setAttribute("aria-pressed", camOff ? "true" : "false");
+      camBtn.title = state.camOff ? "Enable camera" : "Disable camera";
+      camBtn.classList.toggle("active", state.camOff);
+      camBtn.setAttribute("aria-pressed", state.camOff ? "true" : "false");
     }
   }
 
@@ -1461,19 +1949,19 @@ const VideoChat = (() => {
   }
 
   async function toggleMic() {
-    micMuted = !micMuted;
+    state.micMuted = !state.micMuted;
     updateMediaButtons(); // Update instantly for zero delay UI
     if (!localStream || localStream.getAudioTracks().length === 0) {
-      if (!micMuted) {
+      if (!state.micMuted) {
         const ok = await startLocalMedia({ audio: true, video: false });
         if (!ok) {
-          micMuted = true;
+          state.micMuted = true;
           updateMediaButtons();
           return;
         }
       }
     } else {
-      if (micMuted) {
+      if (state.micMuted) {
         // Turning OFF: stop hardware and remove track so next unmute re-acquires.
         localStream.getAudioTracks().forEach((t) => {
           t.stop();
@@ -1498,7 +1986,7 @@ const VideoChat = (() => {
               _replaceVoiceTrack();
             }
           } else {
-            micMuted = true;
+            state.micMuted = true;
             updateMediaButtons();
           }
         }
@@ -1508,23 +1996,23 @@ const VideoChat = (() => {
     syncControlButtons();
     updateLocalTilePresentation();
     broadcastProfile(true);
-    showToast(micMuted ? "Microphone muted" : "Microphone unmuted", "info");
+    showToast(state.micMuted ? "Microphone muted" : "Microphone unmuted", "info");
   }
 
   async function toggleCamera() {
-    camOff = !camOff;
+    state.camOff = !state.camOff;
     updateMediaButtons(); // Update instantly
     if (!localStream || localStream.getVideoTracks().length === 0) {
-      if (!camOff) {
+      if (!state.camOff) {
         const ok = await startLocalMedia({ video: true, audio: false });
         if (!ok) {
-          camOff = true;
+          state.camOff = true;
           updateMediaButtons();
           return;
         }
       }
     } else {
-      if (camOff) {
+      if (state.camOff) {
         // Turning OFF: stop hardware and remove track so next enable re-acquires.
         localStream.getVideoTracks().forEach((t) => {
           t.stop();
@@ -1544,7 +2032,7 @@ const VideoChat = (() => {
         } else {
           const ok = await startLocalMedia({ video: true, audio: false });
           if (!ok) {
-            camOff = true;
+            state.camOff = true;
             updateMediaButtons();
           }
         }
@@ -1554,7 +2042,7 @@ const VideoChat = (() => {
     syncControlButtons();
     updateLocalTilePresentation();
     broadcastProfile(true);
-    showToast(camOff ? "Camera disabled" : "Camera enabled", "info");
+    showToast(state.camOff ? "Camera disabled" : "Camera enabled", "info");
   }
 
   function disconnectPeer(peerId) {
@@ -1570,18 +2058,18 @@ const VideoChat = (() => {
     } else {
       mutedPeers.add(peerId);
     }
-    
+
     const tile = getTileElements(peerId);
     if (tile && tile.video) {
-        tile.video.muted = mutedPeers.has(peerId);
+      tile.video.muted = mutedPeers.has(peerId);
     }
-    
+
     updateParticipantsList();
   }
 
   async function endCall(options = {}) {
     const { keepEndControlVisible = false } = options;
-    isEndingCall = true;
+    state.isEndingCall = true;
 
     activeCalls.forEach((call) => {
       try {
@@ -1607,7 +2095,7 @@ const VideoChat = (() => {
     stopAllRemoteSpeakingMonitors();
     localSpeakingUntil = 0;
     setTileSpeakingIndicator("local", false);
-    localHandRaised = false;
+    state.localHandRaised = false;
     syncRaiseHandButton();
     state.connected = false;
     updateStatus("fa-solid fa-phone-slash", "Call ended", "muted");
@@ -1635,7 +2123,7 @@ const VideoChat = (() => {
         name: "Call session ended",
         details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()}`,
       });
-    isEndingCall = false;
+    state.isEndingCall = false;
   }
 
   async function hangup(options = {}) {
@@ -1684,14 +2172,14 @@ const VideoChat = (() => {
     localSpeakingUntil = 0;
     setTileSpeakingIndicator("local", false);
     if (typeof VoiceChanger !== "undefined") VoiceChanger.destroy();
-    
+
     /* Reset monitor button state */
     const monitorBtn = $("btn-monitor");
     if (monitorBtn) {
       monitorBtn.classList.remove("active");
       monitorBtn.setAttribute("aria-pressed", "false");
     }
-    
+
     /* Reset voice mode buttons to normal, clear all per-effect slider rows */
     document.querySelectorAll("[data-voice-mode]").forEach((btn) => {
       const isNormal = btn.dataset.voiceMode === "normal";
@@ -1722,9 +2210,7 @@ const VideoChat = (() => {
       // sender's current track has been set to null by a mute cycle.
       let sender = call.sendersByKind ? call.sendersByKind["audio"] : null;
       if (!sender && call.peerConnection) {
-        sender = call.peerConnection
-          .getSenders()
-          .find((s) => s.track && s.track.kind === "audio");
+        sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "audio");
         if (sender && call.sendersByKind) call.sendersByKind["audio"] = sender;
       }
       if (sender) {
@@ -2088,7 +2574,7 @@ const VideoChat = (() => {
       document.body.appendChild(overlay);
 
       overlay.querySelector("#consent-allow").onclick = () => {
-        consentGiven = true;
+        state.consentGiven = true;
         overlay.remove();
         ConsentManager &&
           ConsentManager.record({
@@ -2106,6 +2592,18 @@ const VideoChat = (() => {
   }
 
   /* ── Share link ── */
+  function buildRoomUrl(roomId = "") {
+    const target = new URL(`${window.location.origin}/video-room`);
+    if (roomId) {
+      target.searchParams.set("room", roomId);
+    }
+    /* Include user's current media preferences in share link */
+    if (state.walkieTalkieMode) {
+      target.searchParams.set("walkie", "1");
+    }
+    return target;
+  }
+
   function copyRoomId() {
     if (!state.peerId) {
       showToast("Room not ready yet — please wait", "warning");
@@ -2119,8 +2617,8 @@ const VideoChat = (() => {
       showToast("Room not ready yet — please wait", "warning");
       return;
     }
-    const url = `${window.location.origin}/video-chat?room=${encodeURIComponent(state.peerId)}`;
-    copyToClipboard(url, "Room link");
+    const shareUrl = buildRoomUrl(state.peerId);
+    copyToClipboard(shareUrl.toString(), "Room link");
   }
 
   /* ── Screen share ── */
@@ -2132,19 +2630,21 @@ const VideoChat = (() => {
         // Use cached sender reference (robust against null tracks)
         let sender = call.sendersByKind ? call.sendersByKind.video : null;
         if (!sender && call.peerConnection) {
-          sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === "video");
+          sender = call.peerConnection
+            .getSenders()
+            .find((s) => s.track && s.track.kind === "video");
         }
         if (sender) await sender.replaceTrack(screenTrack);
       }
       const localVideo = $("local-video");
       if (localVideo) localVideo.srcObject = screenStream;
       showToast("Screen sharing started", "success");
-      screenSharing = true;
+      state.screenSharing = true;
       $("btn-screen") && $("btn-screen").classList.add("active");
       updateLocalTilePresentation();
       broadcastProfile(true);
       screenTrack.onended = () => {
-        if (screenSharing) stopScreenShare();
+        if (state.screenSharing) stopScreenShare();
       };
     } catch (err) {
       if (err.name !== "NotAllowedError") showToast("Screen share error: " + err.message, "error");
@@ -2179,7 +2679,7 @@ const VideoChat = (() => {
       localVideo.srcObject = localStream;
     }
     $("btn-screen") && $("btn-screen").classList.remove("active");
-    screenSharing = false;
+    state.screenSharing = false;
     updateLocalTilePresentation();
     broadcastProfile(true);
     showToast("Screen sharing stopped", "info");
@@ -2193,10 +2693,10 @@ const VideoChat = (() => {
     const hasUrlPrefs = mic !== null || cam !== null;
 
     if (mic === "off" || mic === "on") {
-      initialMediaPreferences.mic = mic === "on";
+      state.initialMediaPreferences.mic = mic === "on";
     }
     if (cam === "off" || cam === "on") {
-      initialMediaPreferences.cam = cam === "on";
+      state.initialMediaPreferences.cam = cam === "on";
     }
 
     if (hasUrlPrefs) {
@@ -2204,8 +2704,8 @@ const VideoChat = (() => {
         window.sessionStorage.setItem(
           MEDIA_PREFS_STORAGE_KEY,
           JSON.stringify({
-            mic: Boolean(initialMediaPreferences.mic),
-            cam: Boolean(initialMediaPreferences.cam),
+            mic: Boolean(state.initialMediaPreferences.mic),
+            cam: Boolean(state.initialMediaPreferences.cam),
           })
         );
       } catch {
@@ -2218,10 +2718,10 @@ const VideoChat = (() => {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === "object") {
             if (typeof parsed.mic === "boolean") {
-              initialMediaPreferences.mic = parsed.mic;
+              state.initialMediaPreferences.mic = parsed.mic;
             }
             if (typeof parsed.cam === "boolean") {
-              initialMediaPreferences.cam = parsed.cam;
+              state.initialMediaPreferences.cam = parsed.cam;
             }
           }
         }
@@ -2248,9 +2748,9 @@ const VideoChat = (() => {
     readInitialMediaPreferencesFromUrl();
     applyInitialMediaPreferences();
     updateLocalTilePresentation();
-    
+
     // Start media eagerly only when the initial preference explicitly enables mic/camera.
-    if (initialMediaPreferences.mic || initialMediaPreferences.cam) {
+    if (state.initialMediaPreferences.mic || state.initialMediaPreferences.cam) {
       const ok = await startLocalMedia();
       if (ok) {
         applyInitialMediaPreferences();
@@ -2261,11 +2761,37 @@ const VideoChat = (() => {
     _applyStoredVoicePreferences();
     syncRaiseHandButton();
     updateParticipantsList();
-    
+
+    /* Restore walkie-talkie mode from sessionStorage or URL param */
+    const params = new URLSearchParams(window.location.search);
+    const isJoiningFromInvite = params.has("room");
+    const walkieParam = params.get("walkie");
+
+    if (walkieParam === "1") {
+      state.walkieEnforced = true;
+      activateWalkieTalkieMode(true);
+    } else if (isJoiningFromInvite) {
+      /* Explicitly turn OFF walkie-talkie if joining a room that doesn't request it.
+         This overrides any stale preferences in sessionStorage. */
+      deactivateWalkieTalkieMode();
+    } else {
+      restoreWalkieState();
+    }
+    /* Ensure current mode state is persisted for future page refreshes */
+    persistWalkieState();
+    updateParticipantModeHint();
+
     // Always init peer regardless of success of startLocalMedia (can join without media)
     await initPeer();
     checkInitialPermissions();
     window.addEventListener("beforeunload", () => {
+      /* If speaking, release floor before we vanish */
+      if (state.walkieTalkieMode && state.pttActive) {
+        try {
+          releaseFloor();
+        } catch { /* ignore */ }
+      }
+
       // Inline synchronous teardown for unload – browsers don't wait for Promises
       try {
         if (peer) {
@@ -2316,6 +2842,8 @@ const VideoChat = (() => {
     stopScreenShare,
     copyRoomId,
     copyRoomLink,
+    activateWalkieTalkieMode,
+    deactivateWalkieTalkieMode,
     state,
     togglePeerAudioMute,
   };

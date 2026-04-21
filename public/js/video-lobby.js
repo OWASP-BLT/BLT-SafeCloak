@@ -7,12 +7,15 @@
   const ROOM_ID_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
+  const DISPLAY_NAME_LOCAL_KEY = "blt-safecloak-display-name-local";
   const MEDIA_PREFS_STORAGE_KEY = "blt-safecloak-media-preferences";
+  const WALKIE_STATE_STORAGE_KEY = "blt-safecloak-walkie-state";
   const LOBBY_EFFECT_ORDER = ["deep", "chipmunk", "robot", "echo", "voice1", "voice2", "voice3"];
 
   let previewStream = null;
   let micEnabled = false;
   let camEnabled = false;
+  let walkieEnabled = false;
   let voiceUiBound = false;
 
   const $ = (id) => document.getElementById(id);
@@ -23,6 +26,11 @@
 
   function normalizeDisplayName(value) {
     return (value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  }
+
+  function readWalkiePreferenceFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("walkie") === "1";
   }
 
   function isValidRoomId(value) {
@@ -57,6 +65,20 @@
     }
     if (fromStorage) {
       input.value = fromStorage;
+      showSavedNameBadge(fromStorage);
+      return;
+    }
+
+    /* Fallback: check localStorage for cross-session persistence */
+    let fromLocal = "";
+    try {
+      fromLocal = normalizeDisplayName(window.localStorage.getItem(DISPLAY_NAME_LOCAL_KEY));
+    } catch {
+      /* ignore storage failures */
+    }
+    if (fromLocal) {
+      input.value = fromLocal;
+      showSavedNameBadge(fromLocal);
     }
   }
 
@@ -77,7 +99,78 @@
     } catch {
       /* ignore storage failures */
     }
+    /* Also persist to localStorage for cross-session recall */
+    try {
+      window.localStorage.setItem(DISPLAY_NAME_LOCAL_KEY, name);
+    } catch {
+      /* ignore storage failures */
+    }
     return name;
+  }
+
+  function showSavedNameBadge(name) {
+    const badge = $("saved-name-badge");
+    const badgeName = $("saved-name-value");
+    const input = getDisplayNameInput();
+    if (!badge || !badgeName) return;
+    badgeName.textContent = name;
+    badge.classList.remove("hidden");
+    badge.classList.add("flex");
+    if (input) input.style.display = "none";
+  }
+
+  function clearSavedName() {
+    const badge = $("saved-name-badge");
+    const input = getDisplayNameInput();
+    try {
+      window.localStorage.removeItem(DISPLAY_NAME_LOCAL_KEY);
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.sessionStorage.removeItem(DISPLAY_NAME_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (badge) {
+      badge.classList.add("hidden");
+      badge.classList.remove("flex");
+    }
+    if (input) {
+      input.style.display = "";
+      input.value = "";
+      input.focus();
+    }
+  }
+
+  function toggleWalkieMode() {
+    walkieEnabled = !walkieEnabled;
+    applyWalkiePreviewUI();
+    
+    /* Persist the change to sessionStorage */
+    try {
+      window.sessionStorage.setItem(WALKIE_STATE_STORAGE_KEY, JSON.stringify({ walkieTalkieMode: walkieEnabled }));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function applyWalkiePreviewUI() {
+    const walkieInfo = $("walkie-info-panel");
+    const walkieToggle = $("walkie-toggle");
+
+    if (walkieToggle) walkieToggle.checked = walkieEnabled;
+    if (walkieInfo) walkieInfo.classList.toggle("hidden", !walkieEnabled);
+
+    if (walkieEnabled) {
+      /* Stop video tracks if active */
+      if (previewStream) {
+        previewStream.getVideoTracks().forEach((t) => t.stop());
+      }
+      camEnabled = false;
+    }
+    
+    updatePreviewUI();
   }
 
   function hasAudioTrack() {
@@ -282,7 +375,8 @@
       return;
     }
 
-    const levels = saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
+    const levels =
+      saved.effectLevels && typeof saved.effectLevels === "object" ? saved.effectLevels : {};
     LOBBY_EFFECT_ORDER.forEach((mode) => {
       const raw = Number(levels[mode]);
       const value = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
@@ -488,7 +582,7 @@
     const videoAvailable = hasVideoTrack();
 
     if (videoEl) {
-      if (videoAvailable) {
+      if (videoAvailable && !walkieEnabled) {
         videoEl.style.display = "block";
         videoEl.srcObject = previewStream;
       } else {
@@ -498,12 +592,24 @@
     }
 
     if (placeholder) {
-      placeholder.style.display = videoAvailable ? "none" : "flex";
-      placeholder.textContent = "Camera preview unavailable";
+      if (walkieEnabled) {
+        placeholder.style.display = "flex";
+        placeholder.innerHTML =
+          '<i class="fa-solid fa-walkie-talkie text-2xl text-amber-500 mb-1"></i><span>Walkie-Talkie Mode Active</span>';
+      } else {
+        placeholder.style.display = videoAvailable ? "none" : "flex";
+        placeholder.textContent = "Camera preview unavailable";
+      }
     }
 
     if (status) {
-      if (audioAvailable && videoAvailable) {
+      if (walkieEnabled) {
+        if (audioAvailable) {
+          status.textContent = "Microphone is ready. (Walkie-Talkie Mode)";
+        } else {
+          status.textContent = "Microphone not found. You will join as a listener.";
+        }
+      } else if (audioAvailable && videoAvailable) {
         status.textContent = "Camera and microphone are ready.";
       } else if (videoAvailable) {
         status.textContent = "Microphone not available. You will join with video only.";
@@ -527,15 +633,20 @@
     }
 
     if (camBtn) {
-      camBtn.innerHTML = camEnabled
-        ? '<i class="fa-solid fa-video" aria-hidden="true"></i>'
-        : '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>';
-      camBtn.title = camEnabled ? "Disable camera before joining" : "Enable camera";
-      camBtn.classList.toggle("active", !camEnabled);
-      camBtn.setAttribute("aria-pressed", (!camEnabled).toString());
-      camBtn.disabled = !videoAvailable;
-      camBtn.classList.toggle("opacity-50", !videoAvailable);
-      camBtn.classList.toggle("cursor-not-allowed", !videoAvailable);
+      if (walkieEnabled) {
+        camBtn.style.display = "none";
+      } else {
+        camBtn.style.display = "";
+        camBtn.innerHTML = camEnabled
+          ? '<i class="fa-solid fa-video" aria-hidden="true"></i>'
+          : '<i class="fa-solid fa-video-slash" aria-hidden="true"></i>';
+        camBtn.title = camEnabled ? "Disable camera before joining" : "Enable camera";
+        camBtn.classList.toggle("active", !camEnabled);
+        camBtn.setAttribute("aria-pressed", (!camEnabled).toString());
+        camBtn.disabled = !videoAvailable;
+        camBtn.classList.toggle("opacity-50", !videoAvailable);
+        camBtn.classList.toggle("cursor-not-allowed", !videoAvailable);
+      }
     }
 
     _syncPreviewVoiceAvailability();
@@ -565,6 +676,7 @@
         setTrackEnabled("audio", false);
         setTrackEnabled("video", false);
         updatePreviewUI();
+        applyWalkiePreviewUI();
         initPreviewVoiceEngine();
         return;
       } catch {
@@ -575,6 +687,7 @@
     micEnabled = false;
     camEnabled = false;
     updatePreviewUI();
+    applyWalkiePreviewUI();
     resetPreviewVoiceUi();
     showToast("Could not access camera/microphone preview", "warning");
   }
@@ -591,6 +704,9 @@
     target.searchParams.set("prejoin", "1");
     target.searchParams.set("mic", micPref);
     target.searchParams.set("cam", camPref);
+    if (walkieEnabled) {
+      target.searchParams.set("walkie", "1");
+    }
     return target;
   }
 
@@ -615,9 +731,25 @@
       } catch {
         /* ignore storage failures */
       }
+      try {
+        window.localStorage.setItem(DISPLAY_NAME_LOCAL_KEY, displayName);
+      } catch {
+        /* ignore storage failures */
+      }
     }
     persistVoicePreferences();
     persistMediaPreferences();
+    /* Persist walkie state for the room page to read */
+    if (walkieEnabled) {
+      try {
+        window.sessionStorage.setItem(
+          WALKIE_STATE_STORAGE_KEY,
+          JSON.stringify({ walkieTalkieMode: true, micMuted: true, camOff: true })
+        );
+      } catch {
+        /* ignore storage failures */
+      }
+    }
     const target = buildRoomUrl(roomId);
     stopPreviewStream();
     window.location.href = target.toString();
@@ -660,10 +792,7 @@
     }
 
     if (!isValidRoomId(roomId)) {
-      showToast(
-        "Room ID must be 6 characters: A-Z (except I,O) and digits 2-9",
-        "error"
-      );
+      showToast("Room ID must be 6 characters: A-Z (except I,O) and digits 2-9", "error");
       return;
     }
 
@@ -709,14 +838,20 @@
           shouldAutoJoinFromInvite = true;
           showToast("Room ID loaded from share link", "info");
         }
-        
+
         try {
           const createCard = $("card-create-room");
           const joinCard = $("card-join-room");
           const createBtn = $("btn-create-room");
           const joinBtn = $("btn-join-room");
 
-          if (createCard && joinCard && createBtn && joinBtn && createCard.parentNode === joinCard.parentNode) {
+          if (
+            createCard &&
+            joinCard &&
+            createBtn &&
+            joinBtn &&
+            createCard.parentNode === joinCard.parentNode
+          ) {
             joinCard.parentNode.insertBefore(joinCard, createCard);
 
             const createClasses = createBtn.className;
@@ -747,14 +882,59 @@
       });
     }
 
+    /* Restore walkie-talkie mode from URL param or sessionStorage */
+    const params = new URLSearchParams(window.location.search);
+    const isInvite = params.has("room");
+
+    if (readWalkiePreferenceFromUrl()) {
+      walkieEnabled = true;
+      const walkieToggle = $("walkie-toggle");
+      if (walkieToggle) {
+        walkieToggle.disabled = true;
+        walkieToggle.title = "Walkie-Talkie mode is enforced for this room link.";
+      }
+    } else if (isInvite) {
+      /* If joining via an invite link that does NOT specify walkie=1,
+         we should default to video mode and ignore any stale session preference. */
+      walkieEnabled = false;
+    } else {
+      try {
+        const walkieState = window.sessionStorage.getItem(WALKIE_STATE_STORAGE_KEY);
+        if (walkieState) {
+          const saved = JSON.parse(walkieState);
+          if (saved && saved.walkieTalkieMode) {
+            walkieEnabled = true;
+            // UI is applied after initPreviewStream completes
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     if (micBtn) micBtn.addEventListener("click", toggleMicPreview);
     if (camBtn) camBtn.addEventListener("click", toggleCamPreview);
+
+    /* Walkie-talkie toggle */
+    const walkieToggle = $("walkie-toggle");
+    if (walkieToggle) {
+      walkieToggle.addEventListener("change", toggleWalkieMode);
+    }
+
+    /* Saved name badge — "Change" link */
+    const changeNameLink = $("change-name-link");
+    if (changeNameLink) {
+      changeNameLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        clearSavedName();
+      });
+    }
 
     try {
       await initPreviewStream();
     } catch (e) {
       // Fallback if initPreviewVoiceEngine(), VoiceChanger.init(), or updatePreviewUI() fails
-      // inside initPreviewStream(). We reset to a safe "null" state so the UI reflects a 
+      // inside initPreviewStream(). We reset to a safe "null" state so the UI reflects a
       // non-previewable state and users can still proceed.
       micEnabled = false;
       camEnabled = false;
@@ -779,12 +959,14 @@
       }
     }
 
+    /* 
     if (shouldAutoJoinFromInvite) {
       const existingName = normalizeDisplayName(displayNameInput ? displayNameInput.value : "");
       if (existingName) {
         joinRoom();
       }
     }
+    */
   });
 
   window.addEventListener("beforeunload", stopPreviewStream);
