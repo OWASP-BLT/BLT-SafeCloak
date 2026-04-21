@@ -41,6 +41,7 @@ Then run the tests::
 """
 
 import http.server
+import base64
 import re
 import shutil
 import socket
@@ -438,6 +439,10 @@ _STREAM_CHECK_JS = """
 }
 """
 
+_AVATAR_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2vQAAAAASUVORK5CYII="
+)
+
 
 # ---------------------------------------------------------------------------
 # Test
@@ -563,6 +568,71 @@ def test_room_url_persists_on_refresh_and_shared_link_joins_same_room(app_server
             )
             joiner_page.wait_for_function(
                 "document.querySelectorAll('.video-wrapper').length >= 2",
+                timeout=TIMEOUT_MS,
+            )
+        finally:
+            browser.close()
+
+
+def test_avatar_upload_syncs_to_other_peers_in_realtime(app_server_url):
+    """Uploading/clearing a local avatar should update the connected peer's tile via profile sync."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(args=_BROWSER_ARGS)
+        try:
+            ctx1 = _new_context(browser)
+            ctx2 = _new_context(browser)
+            p1 = ctx1.new_page()
+            p2 = ctx2.new_page()
+
+            room_url = f"{app_server_url}/video-room?mic=on&cam=on"
+            p1.goto(room_url)
+            p2.goto(room_url)
+
+            id1 = _peer_id(p1)
+            _peer_id(p2)
+
+            p2.fill("#remote-id", id1)
+            p2.click("#btn-call")
+            _accept_consent(p2)
+            _accept_consent(p1)
+
+            p1.wait_for_function("document.querySelectorAll('.video-wrapper').length >= 2", timeout=TIMEOUT_MS)
+            p2.wait_for_function("document.querySelectorAll('.video-wrapper').length >= 2", timeout=TIMEOUT_MS)
+
+            p1.click("#btn-cam")
+            p1.set_input_files(
+                "#avatar-upload-input",
+                {"name": "avatar.png", "mimeType": "image/png", "buffer": _AVATAR_PNG_BYTES},
+            )
+
+            p2.wait_for_function(
+                "() => {"
+                f"  const tile = document.getElementById('wrapper-{id1}');"
+                "  if (!tile) return false;"
+                "  const image = tile.querySelector('.video-avatar-image');"
+                "  const initials = tile.querySelector('.video-avatar-initials');"
+                "  return Boolean("
+                "    image && image.getAttribute('src') && image.getAttribute('src').startsWith('data:image/') &&"
+                "    !image.classList.contains('hidden') &&"
+                "    initials && initials.classList.contains('hidden')"
+                "  );"
+                "}",
+                timeout=TIMEOUT_MS,
+            )
+
+            p1.click("#btn-clear-avatar")
+            p2.wait_for_function(
+                "() => {"
+                f"  const tile = document.getElementById('wrapper-{id1}');"
+                "  if (!tile) return false;"
+                "  const image = tile.querySelector('.video-avatar-image');"
+                "  const initials = tile.querySelector('.video-avatar-initials');"
+                "  const src = image ? (image.getAttribute('src') || '').trim() : '';"
+                "  return Boolean("
+                "    image && image.classList.contains('hidden') && src === '' &&"
+                "    initials && !initials.classList.contains('hidden')"
+                "  );"
+                "}",
                 timeout=TIMEOUT_MS,
             )
         finally:
@@ -1188,6 +1258,18 @@ def test_video_room_includes_voice_controller_ui():
         'id="slider-monitor-volume"',
         'id="slider-mic-gain"',
         'src="js/voice-changer.js"',
+    ]
+    for snippet in required_snippets:
+        assert snippet in html, f"Expected snippet missing in video-room.html: {snippet}"
+
+
+def test_video_room_includes_avatar_upload_controls():
+    """Video room page should expose avatar upload/remove controls for profile sharing."""
+    html = (ROOT / "src/pages/video-room.html").read_text(encoding="utf-8")
+    required_snippets = [
+        'id="avatar-upload-input"',
+        'id="btn-clear-avatar"',
+        'id="avatar-local-image"',
     ]
     for snippet in required_snippets:
         assert snippet in html, f"Expected snippet missing in video-room.html: {snippet}"

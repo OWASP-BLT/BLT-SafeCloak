@@ -24,11 +24,14 @@ const VideoChat = (() => {
   const VOICE_PREFS_STORAGE_KEY = "blt-safecloak-voice-preferences";
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const ROOM_ID_STORAGE_KEY = "blt-safecloak-room-id";
+  const AVATAR_STORAGE_KEY = "blt-safecloak-avatar-image";
+  const MAX_AVATAR_FILE_BYTES = 256 * 1024;
+  const MAX_AVATAR_DATA_URL_LENGTH = 360000;
   const PROFILE_BROADCAST_THROTTLE_MS = 220;
   const SPEAKING_THRESHOLD = 28;
   const SPEAKING_HOLD_MS = 260;
 
-  const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff, handRaised }
+  const peerProfiles = new Map(); // peerId -> { name, initials, micMuted, camOff, handRaised, avatarDataUrl }
   const remoteSpeakingMonitors = new Map(); // peerId -> { analyser, data, source, activeUntil }
   const mutedPeers = new Set(); // peerId -> locally muted audio
   let speakingLoopFrame = null;
@@ -48,6 +51,7 @@ const VideoChat = (() => {
     sessionKey: null,
     displayName: "You",
     displayInitials: "YU",
+    avatarDataUrl: "",
   };
 
   /* ── DOM helpers ── */
@@ -103,6 +107,14 @@ const VideoChat = (() => {
     return first.slice(0, 2).toUpperCase() || "NA";
   }
 
+  function normalizeAvatarDataUrl(value) {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > MAX_AVATAR_DATA_URL_LENGTH) return "";
+    if (!/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(trimmed)) return "";
+    return trimmed;
+  }
+
   function resolveDisplayName() {
     const params = new URLSearchParams(window.location.search);
     const fromUrl = normalizeDisplayName(params.get("name"));
@@ -133,6 +145,7 @@ const VideoChat = (() => {
         micMuted: isLocalMicMutedState(),
         camOff: isLocalCamOffState(),
         handRaised: localHandRaised,
+        avatarDataUrl: state.avatarDataUrl,
       };
     }
     const profile = peerProfiles.get(peerId);
@@ -143,6 +156,7 @@ const VideoChat = (() => {
       micMuted: false,
       camOff: false,
       handRaised: false,
+      avatarDataUrl: "",
     };
   }
 
@@ -218,6 +232,7 @@ const VideoChat = (() => {
       micMuted: isLocalMicMutedState(),
       camOff: screenSharing ? false : isLocalCamOffState(),
       handRaised: localHandRaised,
+      avatarDataUrl: state.avatarDataUrl,
     };
   }
 
@@ -248,6 +263,7 @@ const VideoChat = (() => {
       dot: wrapper.querySelector(".status-dot"),
       video: wrapper.querySelector("video"),
       avatar: wrapper.querySelector(".video-avatar"),
+      avatarImage: wrapper.querySelector(".video-avatar-image"),
       avatarInitials: wrapper.querySelector(".video-avatar-initials"),
       avatarName: wrapper.querySelector(".video-avatar-name"),
       speaking: wrapper.querySelector(".video-speaking-indicator"),
@@ -282,6 +298,23 @@ const VideoChat = (() => {
     tile.speaking.classList.toggle("active", Boolean(active));
   }
 
+  function syncTileAvatarVisual(tile, avatarDataUrl) {
+    if (!tile) return;
+    const hasAvatarImage = Boolean(avatarDataUrl);
+    if (tile.avatarImage) {
+      if (hasAvatarImage) {
+        tile.avatarImage.src = avatarDataUrl;
+        tile.avatarImage.classList.remove("hidden");
+      } else {
+        tile.avatarImage.removeAttribute("src");
+        tile.avatarImage.classList.add("hidden");
+      }
+    }
+    if (tile.avatarInitials) {
+      tile.avatarInitials.classList.toggle("hidden", hasAvatarImage);
+    }
+  }
+
   function ensureRemoteTile(peerId) {
     const existing = getTileElements(peerId);
     if (existing) return existing;
@@ -303,6 +336,10 @@ const VideoChat = (() => {
     avatar.style.display = "none";
     avatar.setAttribute("aria-hidden", "true");
 
+    const avatarImage = document.createElement("img");
+    avatarImage.className = "video-avatar-image hidden";
+    avatarImage.alt = `${profile.name} avatar`;
+
     const avatarInitials = document.createElement("div");
     avatarInitials.className = "video-avatar-initials";
     avatarInitials.textContent = profile.initials;
@@ -311,6 +348,7 @@ const VideoChat = (() => {
     avatarName.className = "video-avatar-name";
     avatarName.textContent = profile.name;
 
+    avatar.appendChild(avatarImage);
     avatar.appendChild(avatarInitials);
     avatar.appendChild(avatarName);
     videoWrapper.appendChild(avatar);
@@ -374,6 +412,7 @@ const VideoChat = (() => {
     const profile = getProfileForPeer(peerId);
     const displayName = isLocal ? state.displayName : profile.name;
     const initials = profile.initials || makeInitials(displayName);
+    const avatarDataUrl = normalizeAvatarDataUrl(profile.avatarDataUrl);
     const micIsMuted = isLocal ? isLocalMicMutedState() : Boolean(profile.micMuted);
     const cameraIsOff = isLocal ? isLocalCamOffState() : Boolean(profile.camOff);
 
@@ -393,6 +432,7 @@ const VideoChat = (() => {
     if (tile.avatarName) {
       tile.avatarName.textContent = displayName;
     }
+    syncTileAvatarVisual(tile, avatarDataUrl);
 
     setAvatarVisibility(tile.avatar, cameraIsOff);
     setTileStateIcon(tile.stateMic, "mic", micIsMuted);
@@ -507,6 +547,7 @@ const VideoChat = (() => {
       micMuted: false,
       camOff: false,
       handRaised: false,
+      avatarDataUrl: "",
     };
     const normalizedName = normalizeDisplayName(payload && payload.name);
 
@@ -520,11 +561,107 @@ const VideoChat = (() => {
         payload && typeof payload.handRaised === "boolean"
           ? payload.handRaised
           : Boolean(prev.handRaised),
+      avatarDataUrl:
+        payload && Object.prototype.hasOwnProperty.call(payload, "avatarDataUrl")
+          ? normalizeAvatarDataUrl(payload.avatarDataUrl)
+          : normalizeAvatarDataUrl(prev.avatarDataUrl),
     };
 
     peerProfiles.set(peerId, profile);
     updateTilePresentation(peerId);
     updateParticipantsList();
+  }
+
+  function persistAvatarDataUrl(avatarDataUrl) {
+    try {
+      if (avatarDataUrl) {
+        window.sessionStorage.setItem(AVATAR_STORAGE_KEY, avatarDataUrl);
+      } else {
+        window.sessionStorage.removeItem(AVATAR_STORAGE_KEY);
+      }
+    } catch {
+      /* ignore storage failures */
+    }
+  }
+
+  function setLocalAvatarDataUrl(avatarDataUrl) {
+    const normalizedAvatar = normalizeAvatarDataUrl(avatarDataUrl);
+    state.avatarDataUrl = normalizedAvatar;
+    persistAvatarDataUrl(normalizedAvatar);
+    updateLocalTilePresentation();
+    broadcastProfile(true);
+  }
+
+  function readStoredAvatarDataUrl() {
+    try {
+      return normalizeAvatarDataUrl(window.sessionStorage.getItem(AVATAR_STORAGE_KEY));
+    } catch {
+      return "";
+    }
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => reject(new Error("Could not read the selected file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function setAvatarFromFile(file) {
+    if (!file || typeof file !== "object") {
+      showToast("Select an image file to upload.", "warning");
+      return false;
+    }
+    if (!/^image\/(?:png|jpeg|webp|gif)$/i.test(file.type || "")) {
+      showToast("Avatar must be PNG, JPEG, WEBP, or GIF.", "warning");
+      return false;
+    }
+    if (file.size > MAX_AVATAR_FILE_BYTES) {
+      showToast("Avatar must be 256 KB or smaller.", "warning");
+      return false;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const normalized = normalizeAvatarDataUrl(dataUrl);
+      if (!normalized) {
+        showToast("Invalid avatar image format.", "error");
+        return false;
+      }
+      setLocalAvatarDataUrl(normalized);
+      showToast("Avatar updated.", "success");
+      return true;
+    } catch (error) {
+      showToast(error && error.message ? error.message : "Failed to update avatar.", "error");
+      return false;
+    }
+  }
+
+  function clearAvatar() {
+    setLocalAvatarDataUrl("");
+    const input = $("avatar-upload-input");
+    if (input) input.value = "";
+    showToast("Avatar removed.", "info");
+  }
+
+  function bindAvatarControls() {
+    const input = $("avatar-upload-input");
+    if (input) {
+      input.addEventListener("change", async (event) => {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null;
+        const success = await setAvatarFromFile(file);
+        if (!success) {
+          event.target.value = "";
+        }
+      });
+    }
+    const clearBtn = $("btn-clear-avatar");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        clearAvatar();
+      });
+    }
   }
 
   function sendProfileTo(peerId, force = false) {
@@ -2244,10 +2381,12 @@ const VideoChat = (() => {
   async function init() {
     state.displayName = resolveDisplayName();
     state.displayInitials = makeInitials(state.displayName);
+    state.avatarDataUrl = readStoredAvatarDataUrl();
 
     readInitialMediaPreferencesFromUrl();
     applyInitialMediaPreferences();
     updateLocalTilePresentation();
+    bindAvatarControls();
     
     // Start media eagerly only when the initial preference explicitly enables mic/camera.
     if (initialMediaPreferences.mic || initialMediaPreferences.cam) {
