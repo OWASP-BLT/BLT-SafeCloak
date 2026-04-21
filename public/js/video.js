@@ -2870,6 +2870,9 @@ const VideoChat = (() => {
   };
 })();
 
+// Ensure VideoChat is globally accessible from onclick handlers
+window.VideoChat = VideoChat;
+
 window.toggleParticipantMute = (peerId) => {
   if (typeof VideoChat !== "undefined" && VideoChat.togglePeerAudioMute) {
     VideoChat.togglePeerAudioMute(peerId);
