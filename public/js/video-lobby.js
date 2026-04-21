@@ -626,8 +626,8 @@
           vs.getVideoTracks().forEach((t) => {
             if (previewStream) previewStream.addTrack(t);
           });
-          camEnabled = false;
-          setTrackEnabled("video", false);
+          camEnabled = true;
+          setTrackEnabled("video", true);
         } catch {
           /* camera unavailable — continue without it */
         }
