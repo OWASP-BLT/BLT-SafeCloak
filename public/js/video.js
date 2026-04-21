@@ -860,6 +860,17 @@ const VideoChat = (() => {
       const statsList = await Promise.all(
         peerEntries.map(([peerId, call]) => collectPeerStats(peerId, call))
       );
+
+      /* If the mesh changed or ended while getStats was in flight, do not paint stale results. */
+      if (activeCalls.size === 0) {
+        if (!healthPanelIdle) resetCallHealthPanel();
+        return;
+      }
+      if (peerEntries.some(([id]) => !activeCalls.has(id))) {
+        healthUpdatePending = true;
+        return;
+      }
+
       const rows = statsList
         .filter(Boolean)
         .map((s) => ({
