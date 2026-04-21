@@ -2748,6 +2748,7 @@ const VideoChat = (() => {
     /* If joining via invite link without display name, redirect to lobby first */
     const params = new URLSearchParams(window.location.search);
     const isJoiningRoom = params.has("room");
+    const isHostPage = window.location.pathname.includes("/video-room"); // Check if already on room page
     const hasDisplayName = params.has("name") || 
       (() => {
         try {
@@ -2757,7 +2758,8 @@ const VideoChat = (() => {
         }
       })();
     
-    if (isJoiningRoom && !hasDisplayName) {
+    /* Only redirect to lobby if joining a room from a different page and no display name */
+    if (isJoiningRoom && !hasDisplayName && !isHostPage) {
       /* Preserve room and walkie parameters when redirecting to lobby */
       const lobbyUrl = new URL(`${window.location.origin}/video-chat`);
       if (params.has("room")) lobbyUrl.searchParams.set("room", params.get("room"));
