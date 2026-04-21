@@ -25,8 +25,10 @@ const VideoChat = (() => {
   const DISPLAY_NAME_STORAGE_KEY = "blt-safecloak-display-name";
   const ROOM_ID_STORAGE_KEY = "blt-safecloak-room-id";
   const AVATAR_STORAGE_KEY = "blt-safecloak-avatar-image";
-  const MAX_AVATAR_FILE_BYTES = 256 * 1024;
-  const MAX_AVATAR_DATA_URL_LENGTH = 360000;
+  const MAX_AVATAR_FILE_BYTES = 64 * 1024;
+  const MAX_AVATAR_DATA_URL_HEADER_SLACK = 64;
+  const MAX_AVATAR_DATA_URL_LENGTH =
+    4 * Math.ceil(MAX_AVATAR_FILE_BYTES / 3) + MAX_AVATAR_DATA_URL_HEADER_SLACK;
   const PROFILE_BROADCAST_THROTTLE_MS = 220;
   const SPEAKING_THRESHOLD = 28;
   const SPEAKING_HOLD_MS = 260;
@@ -619,7 +621,7 @@ const VideoChat = (() => {
       return false;
     }
     if (file.size > MAX_AVATAR_FILE_BYTES) {
-      showToast("Avatar must be 256 KB or smaller.", "warning");
+      showToast("Avatar must be 64 KB or smaller.", "warning");
       return false;
     }
     try {
@@ -648,12 +650,10 @@ const VideoChat = (() => {
   function bindAvatarControls() {
     const input = $("avatar-upload-input");
     if (input) {
-      input.addEventListener("change", async (event) => {
-        const file = event && event.target && event.target.files ? event.target.files[0] : null;
-        const success = await setAvatarFromFile(file);
-        if (!success) {
-          event.target.value = "";
-        }
+      input.addEventListener("change", async () => {
+        const file = input.files ? input.files[0] : null;
+        await setAvatarFromFile(file);
+        input.value = "";
       });
     }
     const clearBtn = $("btn-clear-avatar");
