@@ -616,8 +616,7 @@ def test_declining_consent_still_allows_join_and_alerts_peers(app_server_url):
                 timeout=TIMEOUT_MS,
             )
             host_page.wait_for_function(
-                "() => Array.from(document.querySelectorAll('#toast-container .toast span:last-child'))"
-                ".some((el) => el.textContent.includes('did not consent to recording'))",
+                "() => (document.getElementById('toast-container')?.textContent || '').includes('did not consent to recording')",
                 timeout=TIMEOUT_MS,
             )
         finally:

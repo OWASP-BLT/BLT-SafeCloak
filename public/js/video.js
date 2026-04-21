@@ -14,7 +14,7 @@ const VideoChat = (() => {
   let voiceAnimFrame = null;
   let micMuted = true;
   let camOff = true;
-  let consentGiven = false;
+  let consentPromptHandled = false;
   let recordingAllowed = true;
   let screenSharing = false;
   let localHandRaised = false;
@@ -533,7 +533,7 @@ const VideoChat = (() => {
       recordingAllowed:
         payload && typeof payload.recordingAllowed === "boolean"
           ? payload.recordingAllowed
-          : prev.recordingAllowed !== false,
+          : (prev.recordingAllowed ?? true),
     };
 
     peerProfiles.set(peerId, profile);
@@ -947,7 +947,7 @@ const VideoChat = (() => {
         incomingCall.close();
         return;
       }
-      if (!consentGiven) {
+      if (!consentPromptHandled) {
         await askConsent(incomingCall.peer);
       }
 
@@ -1350,7 +1350,7 @@ const VideoChat = (() => {
       return false;
     }
 
-    if (!consentGiven) {
+    if (!consentPromptHandled) {
       await askConsent("the remote participant");
     }
 
@@ -2048,7 +2048,7 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3 style="display:flex;align-items:center;gap:0.5rem"><i class="fa-solid fa-shield-halved text-primary" aria-hidden="true"></i>Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to recording while participating in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>? Declining will still let you join, but recording will be disabled for everyone.</p>
+          <p>This call may be recorded for AI notes and security purposes. Do you consent to recording with <strong id="consent-caller-name" style="color:#fff"></strong>? Declining still lets you join, but recording will be disabled for everyone.</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <i class="fa-solid fa-circle-info text-primary" aria-hidden="true"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
@@ -2064,7 +2064,7 @@ const VideoChat = (() => {
       document.body.appendChild(overlay);
 
       overlay.querySelector("#consent-allow").onclick = () => {
-        consentGiven = true;
+        consentPromptHandled = true;
         overlay.remove();
         ConsentManager &&
           ConsentManager.record({
@@ -2075,7 +2075,7 @@ const VideoChat = (() => {
         resolve(true);
       };
       overlay.querySelector("#consent-deny").onclick = () => {
-        consentGiven = true;
+        consentPromptHandled = true;
         overlay.remove();
         disableRecordingForCall("local");
         broadcastProfile(true);
