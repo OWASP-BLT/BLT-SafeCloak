@@ -589,7 +589,8 @@ def test_avatar_upload_syncs_to_other_peers_in_realtime(app_server_url):
             p2.goto(room_url)
 
             id1 = _peer_id(p1)
-            _peer_id(p2)
+            id2 = _peer_id(p2)
+            assert id1 != id2, "Connected peers should have distinct IDs"
 
             p2.fill("#remote-id", id1)
             p2.click("#btn-call")
