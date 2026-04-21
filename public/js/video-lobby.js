@@ -959,14 +959,14 @@
       }
     }
 
-    /* 
+    /* Auto-join if coming from invite link with existing display name */
     if (shouldAutoJoinFromInvite) {
       const existingName = normalizeDisplayName(displayNameInput ? displayNameInput.value : "");
       if (existingName) {
+        /* Display name is available, auto-join the room */
         joinRoom();
       }
     }
-    */
   });
 
   window.addEventListener("beforeunload", stopPreviewStream);

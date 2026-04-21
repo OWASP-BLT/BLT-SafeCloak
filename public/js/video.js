@@ -2742,6 +2742,27 @@ const VideoChat = (() => {
   }
 
   async function init() {
+    /* If joining via invite link without display name, redirect to lobby first */
+    const params = new URLSearchParams(window.location.search);
+    const isJoiningRoom = params.has("room");
+    const hasDisplayName = params.has("name") || 
+      (() => {
+        try {
+          return window.sessionStorage.getItem(DISPLAY_NAME_STORAGE_KEY);
+        } catch {
+          return null;
+        }
+      })();
+    
+    if (isJoiningRoom && !hasDisplayName) {
+      /* Preserve room and walkie parameters when redirecting to lobby */
+      const lobbyUrl = new URL(`${window.location.origin}/video-chat`);
+      if (params.has("room")) lobbyUrl.searchParams.set("room", params.get("room"));
+      if (params.has("walkie")) lobbyUrl.searchParams.set("walkie", params.get("walkie"));
+      window.location.href = lobbyUrl.toString();
+      return;
+    }
+    
     state.displayName = resolveDisplayName();
     state.displayInitials = makeInitials(state.displayName);
 
