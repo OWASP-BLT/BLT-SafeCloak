@@ -200,14 +200,15 @@ const VideoChat = (() => {
   }
 
   function ensureRoomIdInUrl(roomId) {
-    /* Use the peer ID as-is (might be in different format depending on PeerJS config) */
-    const normalizedRoomId = normalizeRoomId(roomId);
-    if (!normalizedRoomId) return;
+    /* Use the peer ID as-is without transformation to match DOM display */
+    if (!roomId || typeof roomId !== "string") return;
+    const trimmedId = roomId.trim();
+    if (!trimmedId) return;
     try {
       const url = new URL(window.location.href);
       const currentRoom = url.searchParams.get("room");
-      if (currentRoom === normalizedRoomId) return; // Already correct
-      url.searchParams.set("room", normalizedRoomId);
+      if (currentRoom === trimmedId) return; // Already correct
+      url.searchParams.set("room", trimmedId);
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {
       /* ignore URL update failures */
