@@ -50,11 +50,7 @@ def html_response(html_str: str, status: int = 200) -> Response:
     Returns:
         Response object with HTML content type and CORS headers
     """
-    return Response(
-        html_str,
-        status=status,
-        headers=base_headers('text/html; charset=utf-8')
-    )
+    return Response(html_str, status=status, headers=base_headers('text/html; charset=utf-8'))
 
 
 def json_response(data: Any, status: int = 200) -> Response:
@@ -76,11 +72,10 @@ def json_response(data: Any, status: int = 200) -> Response:
         json.dumps(
             data,
             ensure_ascii=False,  # Keeps Unicode readable (e.g., हिंदी)
-            default=str          # Fallback for non-serializable objects
+            default=str  # Fallback for non-serializable objects
         ),
         status=status,
-        headers=base_headers('application/json; charset=utf-8')
-    )
+        headers=base_headers('application/json; charset=utf-8'))
 
 
 def cors_response(status: int = 204) -> Response:
@@ -102,7 +97,7 @@ def cors_response(status: int = 204) -> Response:
         None,  # 204 responses should not include a body
         status=status,
         headers={
-            # Allow all origins 
+            # Allow all origins
             'Access-Control-Allow-Origin': '*',
 
             # Allowed HTTP methods
@@ -114,5 +109,4 @@ def cors_response(status: int = 204) -> Response:
             # Cache preflight response (in seconds basically 1 day)
             # Reduces repeated OPTIONS requests
             'Access-Control-Max-Age': '86400',
-        }
-    )
+        })
