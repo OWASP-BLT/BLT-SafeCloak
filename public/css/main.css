@@ -457,31 +457,75 @@ body {
 }
 
 .tech-table-wrap {
-  overflow-x: auto;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
+/* Narrow sidebar: fixed layout + wrap — no min-width, no horizontal scroll. */
 .tech-table {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border-collapse: collapse;
-  min-width: 520px;
+  table-layout: fixed;
 }
 
 .tech-table th,
 .tech-table td {
-  text-align: left;
-  font-size: 0.72rem;
-  padding: 0.42rem 0.55rem;
+  padding: 0.32rem 0.28rem;
   border-bottom: 1px solid #e5e7eb;
-  color: #374151;
-  white-space: nowrap;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  vertical-align: top;
+  text-align: left;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: none;
 }
 
 .tech-table th {
-  font-size: 0.67rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #6b7280;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #6b7280;
+  background: #f1f5f9;
+}
+
+.tech-table td {
+  color: #374151;
+  font-weight: 600;
+}
+
+.tech-table td.font-mono {
+  word-break: break-all;
+}
+
+.tech-table th:nth-child(2),
+.tech-table td.tech-cell-state {
+  width: 26%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Peer + down/up share remaining space; numeric cols use implicit width. */
+.tech-table th:nth-child(1),
+.tech-table td:nth-child(1) {
+  width: 18%;
+}
+
+.tech-table th:nth-child(6),
+.tech-table td:nth-child(6) {
+  width: 20%;
+}
+
+.tech-table-empty {
+  text-align: center;
+  font-weight: 500;
+  color: #6b7280;
+  padding: 0.55rem 0.35rem !important;
 }
 
 .health-charts {

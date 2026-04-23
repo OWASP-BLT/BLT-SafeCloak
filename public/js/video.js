@@ -597,23 +597,27 @@ const VideoChat = (() => {
     const body = $("tech-details-body");
     if (!body) return;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="7">No active peers yet.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" class="tech-table-empty">No active peers yet.</td></tr>`;
       return;
     }
     body.innerHTML = rows
-      .map(
-        (r) => `
+      .map((r) => {
+        const d = r.raw;
+        const rtt = formatTechMs(d.rttMs);
+        const jitter = formatTechMs(d.jitterMs);
+        const loss = formatTechLossPct(d.lossPct);
+        const downUp = formatTechDownUp(d.downKbps, d.upKbps);
+        return `
       <tr>
         <td class="font-mono">${escapeHtml(r.peer)}</td>
-        <td>${escapeHtml(r.state)}</td>
-        <td>${escapeHtml(r.rtt)}</td>
-        <td>${escapeHtml(r.jitter)}</td>
-        <td>${escapeHtml(r.loss)}</td>
-        <td>${escapeHtml(r.down)}</td>
-        <td>${escapeHtml(r.up)}</td>
+        <td class="tech-cell-state">${escapeHtml(r.state)}</td>
+        <td>${escapeHtml(rtt)}</td>
+        <td>${escapeHtml(jitter)}</td>
+        <td>${escapeHtml(loss)}</td>
+        <td>${escapeHtml(downUp)}</td>
       </tr>
-    `
-      )
+    `;
+      })
       .join("");
   }
 
@@ -829,16 +833,21 @@ const VideoChat = (() => {
     };
   }
 
-  function formatMs(v) {
-    return typeof v === "number" && isFinite(v) ? `${Math.round(v)} ms` : "--";
+  /** Unitless values for the technical-details card (units live in <dt> labels). */
+  function formatTechMs(v) {
+    return typeof v === "number" && isFinite(v) ? String(Math.round(v)) : "--";
   }
 
-  function formatLoss(v) {
-    return typeof v === "number" && isFinite(v) ? `${v.toFixed(1)}%` : "--";
+  function formatTechLossPct(v) {
+    return typeof v === "number" && isFinite(v) ? v.toFixed(1) : "--";
   }
 
-  function formatKbps(v) {
-    return typeof v === "number" && isFinite(v) ? `${Math.round(v)} kbps` : "--";
+  function formatTechKbps(v) {
+    return typeof v === "number" && isFinite(v) ? String(Math.round(v)) : "--";
+  }
+
+  function formatTechDownUp(downKbps, upKbps) {
+    return `${formatTechKbps(downKbps)} / ${formatTechKbps(upKbps)}`;
   }
 
   async function updateCallHealthPanel() {
@@ -876,11 +885,6 @@ const VideoChat = (() => {
         .map((s) => ({
           peer: s.peer,
           state: s.state,
-          rtt: formatMs(s.rttMs),
-          jitter: formatMs(s.jitterMs),
-          loss: formatLoss(s.lossPct),
-          down: formatKbps(s.downKbps),
-          up: formatKbps(s.upKbps),
           raw: s,
         }));
 

@@ -109,7 +109,7 @@
           </div>
         </div>
 
-        <div class="grid gap-4 xl:grid-cols-[1fr_320px]" id="main-grid">
+        <div class="grid gap-4 xl:grid-cols-[1fr_minmax(22rem,26rem)]" id="main-grid">
           <section class="flex min-h-[64vh] flex-col gap-4 pb-24">
             <div
               class="video-grid rounded-2xl border border-neutral-border bg-white p-3 shadow-sm"
@@ -435,18 +435,17 @@
                   <table class="tech-table" aria-label="Technical call quality details">
                     <thead>
                       <tr>
-                        <th>Peer</th>
-                        <th>State</th>
-                        <th>RTT</th>
-                        <th>Jitter</th>
-                        <th>Loss</th>
-                        <th>Down</th>
-                        <th>Up</th>
+                        <th scope="col">Peer</th>
+                        <th scope="col">State</th>
+                        <th scope="col">RTT (ms)</th>
+                        <th scope="col">Jitter (ms)</th>
+                        <th scope="col">Loss (%)</th>
+                        <th scope="col">Down/up (kbps)</th>
                       </tr>
                     </thead>
                     <tbody id="tech-details-body">
                       <tr>
-                        <td colspan="7">No active peers yet.</td>
+                        <td colspan="6" class="tech-table-empty">No active peers yet.</td>
                       </tr>
                     </tbody>
                   </table>
