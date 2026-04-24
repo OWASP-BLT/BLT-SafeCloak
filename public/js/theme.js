@@ -4,8 +4,8 @@
  */
 
 const ThemeManager = (() => {
-  const STORAGE_KEY = "blt-theme-preference";
-  const DARK_CLASS = "dark";
+  const STORAGE_KEY = 'blt-theme-preference';
+  const DARK_CLASS = 'dark';
 
   function readStoredTheme() {
     try {
@@ -28,7 +28,7 @@ const ThemeManager = (() => {
    */
   function init() {
     const savedTheme = readStoredTheme();
-    if (savedTheme === "dark") {
+    if (savedTheme === 'dark') {
       document.documentElement.classList.add(DARK_CLASS);
     }
 
@@ -41,7 +41,7 @@ const ThemeManager = (() => {
    */
   function applyTheme(theme) {
     const html = document.documentElement;
-    if (theme === "dark") {
+    if (theme === 'dark') {
       html.classList.add(DARK_CLASS);
     } else {
       html.classList.remove(DARK_CLASS);
@@ -55,7 +55,7 @@ const ThemeManager = (() => {
   function toggle() {
     const html = document.documentElement;
     const isDark = html.classList.contains(DARK_CLASS);
-    const newTheme = isDark ? "light" : "dark";
+    const newTheme = isDark ? 'light' : 'dark';
     applyTheme(newTheme);
     updateToggleButton(newTheme);
   }
@@ -65,7 +65,7 @@ const ThemeManager = (() => {
    * @returns {string} 'light' or 'dark'
    */
   function getCurrentTheme() {
-    return document.documentElement.classList.contains(DARK_CLASS) ? "dark" : "light";
+    return document.documentElement.classList.contains(DARK_CLASS) ? 'dark' : 'light';
   }
 
   /**
@@ -73,19 +73,19 @@ const ThemeManager = (() => {
    * @param {string} theme - 'light' or 'dark'
    */
   function updateToggleButton(theme) {
-    const btn = document.getElementById("theme-toggle-btn");
+    const btn = document.getElementById('theme-toggle-btn');
     if (!btn) return;
 
-    const icon = btn.querySelector("i");
+    const icon = btn.querySelector('i');
 
-    if (theme === "dark") {
-      if (icon) icon.className = "fa-solid fa-sun";
-      btn.setAttribute("aria-label", "Switch to light mode");
-      btn.title = "Light mode";
+    if (theme === 'dark') {
+      if (icon) icon.className = 'fa-solid fa-sun';
+      btn.setAttribute('aria-label', 'Switch to light mode');
+      btn.title = 'Light mode';
     } else {
-      if (icon) icon.className = "fa-solid fa-moon";
-      btn.setAttribute("aria-label", "Switch to dark mode");
-      btn.title = "Dark mode";
+      if (icon) icon.className = 'fa-solid fa-moon';
+      btn.setAttribute('aria-label', 'Switch to dark mode');
+      btn.title = 'Dark mode';
     }
   }
 
@@ -93,9 +93,9 @@ const ThemeManager = (() => {
    * Initialize toggle button click handler
    */
   function initToggleButton() {
-    const btn = document.getElementById("theme-toggle-btn");
+    const btn = document.getElementById('theme-toggle-btn');
     if (btn) {
-      btn.addEventListener("click", toggle);
+      btn.addEventListener('click', toggle);
       // Set initial icon and label based on current theme
       updateToggleButton(getCurrentTheme());
     }
@@ -112,8 +112,8 @@ const ThemeManager = (() => {
 })();
 
 // Initialize theme when DOM is ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.init();
     ThemeManager.initToggleButton();
   });

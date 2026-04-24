@@ -16,11 +16,11 @@
     <script>
       (function () {
         try {
-          if (localStorage.getItem("blt-theme-preference") === "dark") {
-            document.documentElement.classList.add("dark");
+          if (localStorage.getItem('blt-theme-preference') === 'dark') {
+            document.documentElement.classList.add('dark');
           }
         } catch (error) {
-          console.warn("[ThemeBootstrap] Failed to read saved theme:", error);
+          console.warn('[ThemeBootstrap] Failed to read saved theme:', error);
         }
       })();
     </script>
