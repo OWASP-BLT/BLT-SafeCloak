@@ -14,18 +14,18 @@ from workers import Response
 import json
 from typing import Any, Dict
 
-
 _SECURITY_HEADERS: Dict[str, str] = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options":
+    "nosniff",
+    "X-Frame-Options":
+    "DENY",
+    "Referrer-Policy":
+    "no-referrer",
     # Report-only so we can harden iteratively without breaking pages.
-    "Content-Security-Policy-Report-Only": (
-        "default-src 'none'; "
-        "base-uri 'none'; "
-        "form-action 'none'; "
-        "frame-ancestors 'none'"
-    ),
+    "Content-Security-Policy-Report-Only": ("default-src 'none'; "
+                                            "base-uri 'none'; "
+                                            "form-action 'none'; "
+                                            "frame-ancestors 'none'"),
 }
 
 
@@ -75,7 +75,6 @@ def html_response(html_str: str, status: int = 200) -> Response:
     )
 
 
-
 def json_response(data: Any, status: int = 200) -> Response:
     """
     Create a JSON response.
@@ -95,7 +94,7 @@ def json_response(data: Any, status: int = 200) -> Response:
         json.dumps(
             data,
             ensure_ascii=False,  # Keeps Unicode readable (e.g., हिंदी)
-            default=str          # Fallback for non-serializable objects
+            default=str  # Fallback for non-serializable objects
         ),
         status=status,
         headers=base_headers("application/json; charset=utf-8"),
@@ -121,7 +120,7 @@ def cors_response(status: int = 204) -> Response:
         None,  # 204 responses should not include a body
         status=status,
         headers={
-            # Allow all origins 
+            # Allow all origins
             "Access-Control-Allow-Origin": "*",
 
             # Allowed HTTP methods
@@ -134,5 +133,4 @@ def cors_response(status: int = 204) -> Response:
             # Reduces repeated OPTIONS requests
             "Access-Control-Max-Age": "86400",
             **security_headers(),
-        }
-    )
+        })

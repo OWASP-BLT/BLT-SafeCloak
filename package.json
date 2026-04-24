@@ -6,9 +6,9 @@
     "scripts": {
         "dev": "wrangler dev",
         "deploy": "wrangler deploy",
-        "format": "yapf -i -r src/ && prettier --write \"src/**/*.html\" \"public/**/*.{js,css}\"",
-        "format:check": "yapf -d -r src/ && prettier --check \"src/**/*.html\" \"public/**/*.{js,css}\"",
-        "typecheck": "mypy src/",
+        "format": "python -m yapf -i -r src/ && prettier --write \"src/**/*.html\" \"public/**/*.{js,css}\"",
+        "format:check": "python -m yapf -d -r src/ && prettier --check \"src/**/*.html\" \"public/**/*.{js,css}\"",
+        "typecheck": "python -m mypy src/",
         "check": "npm run format:check && npm run typecheck",
         "setup": "npm install && python -m  pip install -r requirements-dev.txt",
         "clean": "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"

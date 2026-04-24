@@ -58,7 +58,11 @@ const VoiceChanger = (() => {
       icon: "fa-phone",
       description: "Classic telephone / walkie-talkie",
     },
-    voice2: { label: "Alien", icon: "fa-rocket", description: "Crystalline and ethereal cosmic observer" },
+    voice2: {
+      label: "Alien",
+      icon: "fa-rocket",
+      description: "Crystalline and ethereal cosmic observer",
+    },
     voice3: { label: "Monster", icon: "fa-skull", description: "Deep monster voice with tremolo" },
   };
 
@@ -129,8 +133,8 @@ const VoiceChanger = (() => {
   function buildEffectNodes(mode, t) {
     switch (mode) {
       case "deep": {
-        /* "Monster" Deep Voice Fake: Without native pitch-shifting, we simulate 
-         * depth by adding a sub-bass Amplitude Modulation (Vocal Fry/Growl) 
+        /* "Monster" Deep Voice Fake: Without native pitch-shifting, we simulate
+         * depth by adding a sub-bass Amplitude Modulation (Vocal Fry/Growl)
          * and cutting all the high "presence" formants. */
         const oscillator = audioCtx.createOscillator();
         oscillator.type = "sawtooth";
@@ -138,7 +142,7 @@ const VoiceChanger = (() => {
 
         const amGain = audioCtx.createGain();
         amGain.gain.value = 1.0;
-        
+
         const modGain = audioCtx.createGain();
         modGain.gain.value = lerp(0.3, 0.7, t); // Depth of the growl
         oscillator.connect(modGain);
@@ -151,7 +155,7 @@ const VoiceChanger = (() => {
         lowpass.type = "lowpass";
         lowpass.frequency.value = 1000; // Heavily muffle normal voice highs
         lowpass.Q.value = 0.5;
-        
+
         const preTrim = audioCtx.createGain();
         preTrim.gain.value = 0.5; // Prevent clipping from sub-bass boost
 
@@ -193,7 +197,7 @@ const VoiceChanger = (() => {
         /* Clean Robotic Voice (100% Noise-Free)
            Pure sine-wave amplitude modulation over a strictly band-passed signal.
            No distortion, waveshapers, or delays to guarantee zero static/noise. */
-        
+
         const bandpass = audioCtx.createBiquadFilter();
         bandpass.type = "bandpass";
         bandpass.frequency.value = 1000;
@@ -201,10 +205,10 @@ const VoiceChanger = (() => {
 
         const oscillator = audioCtx.createOscillator();
         oscillator.type = "sine"; // Pure tone, generates no broadband noise
-        oscillator.frequency.value = lerp(45, 65, t); 
+        oscillator.frequency.value = lerp(45, 65, t);
 
         const amGain = audioCtx.createGain();
-        amGain.gain.value = 1.0; 
+        amGain.gain.value = 1.0;
 
         const modGain = audioCtx.createGain();
         modGain.gain.value = lerp(0.5, 1.0, t); // Depth of robotic chop
@@ -215,7 +219,7 @@ const VoiceChanger = (() => {
         activeOscillators.push(oscillator);
 
         const makeUpGain = audioCtx.createGain();
-        makeUpGain.gain.value = 1.0; 
+        makeUpGain.gain.value = 1.0;
 
         bandpass.connect(amGain);
         amGain.connect(makeUpGain);
@@ -272,11 +276,11 @@ const VoiceChanger = (() => {
         oscillator.frequency.value = lerp(850, 1100, t); // High metallic chime
 
         const rmGain = audioCtx.createGain();
-        rmGain.gain.value = 1.0; 
+        rmGain.gain.value = 1.0;
 
         const amMod = audioCtx.createGain();
         amMod.gain.value = lerp(0.5, 0.9, t);
-        
+
         oscillator.connect(amMod);
         amMod.connect(rmGain.gain);
         oscillator.start();
@@ -284,15 +288,15 @@ const VoiceChanger = (() => {
 
         // Shimmering comb resonance (Reverb/Metallic Sheen)
         const delay = audioCtx.createDelay();
-        delay.delayTime.value = lerp(0.005, 0.012, t); 
-        
+        delay.delayTime.value = lerp(0.005, 0.012, t);
+
         const feedback = audioCtx.createGain();
-        feedback.gain.value = lerp(0.5, 0.70, t);
-        
+        feedback.gain.value = lerp(0.5, 0.7, t);
+
         const damping = audioCtx.createBiquadFilter();
         damping.type = "lowpass";
         damping.frequency.value = 4000;
-        
+
         delay.connect(damping);
         damping.connect(feedback);
         feedback.connect(delay);
@@ -302,11 +306,11 @@ const VoiceChanger = (() => {
 
         const dryMix = audioCtx.createGain();
         dryMix.gain.value = 0.5;
-        
+
         rmGain.connect(delay);
         delay.connect(delayMix);
-        rmGain.connect(dryMix); 
-        
+        rmGain.connect(dryMix);
+
         const finalMix = audioCtx.createGain();
         delayMix.connect(finalMix);
         dryMix.connect(finalMix);
@@ -396,7 +400,7 @@ const VoiceChanger = (() => {
     sourceNode.connect(inputGainNode);
 
     const activeEffects = EFFECT_ORDER.filter((m) => effectLevels[m] > 0);
-    
+
     // Global Compressor to prevent clipping transients
     const compressor = audioCtx.createDynamicsCompressor();
     compressor.threshold.value = -3;
@@ -599,7 +603,7 @@ const VoiceChanger = (() => {
     return micGain;
   }
 
-  /** Release all audio resources. 
+  /** Release all audio resources.
    * @param {boolean} resetPreferences - if true, wipe effects to "normal" (default true).
    */
   function destroy(resetPreferences = true) {
