@@ -250,6 +250,15 @@ body {
   z-index: 4;
 }
 
+.video-avatar-image {
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 2px solid rgba(225, 1, 1, 0.5);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
 .video-avatar-initials {
   width: 72px;
   height: 72px;

@@ -175,6 +175,7 @@
               <div class="video-wrapper rounded-xl bg-gray-900" id="wrapper-local">
                 <video id="local-video" autoplay muted playsinline aria-label="Your video"></video>
                 <div class="video-avatar hidden" id="avatar-local" aria-hidden="true">
+                  <img class="video-avatar-image hidden" id="avatar-local-image" alt="Your avatar" />
                   <div class="video-avatar-initials" id="avatar-local-initials">YU</div>
                   <div class="video-avatar-name" id="avatar-local-name">You</div>
                 </div>
@@ -462,6 +463,34 @@
               >
                 <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
                 Add Participant
+              </button>
+            </div>
+
+            <div class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm">
+              <h2
+                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700"
+              >
+                <i class="fa-solid fa-image text-primary" aria-hidden="true"></i>
+                Avatar
+              </h2>
+              <label class="mb-2 block text-sm font-semibold text-gray-700" for="avatar-upload-input"
+                >Upload image</label
+              >
+              <input
+                type="file"
+                id="avatar-upload-input"
+                class="w-full rounded-md border border-neutral-border px-3 py-2 text-sm text-gray-900"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                aria-label="Upload avatar image"
+              />
+              <button
+                class="btn btn-secondary mt-3 w-full"
+                id="btn-clear-avatar"
+                aria-label="Remove avatar image"
+                type="button"
+              >
+                <i class="fa-solid fa-user-slash" aria-hidden="true"></i>
+                Remove Avatar
               </button>
             </div>
 
