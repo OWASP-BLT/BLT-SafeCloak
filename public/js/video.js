@@ -15,6 +15,8 @@ const VideoChat = (() => {
   let micMuted = true;
   let camOff = true;
   let consentGiven = false;
+  let consentPromptHandled = false;
+  let recordingAllowed = true;
   let screenSharing = false;
   let activeScreenStream = null;
   let localHandRaised = false;
@@ -289,7 +291,20 @@ const VideoChat = (() => {
       micMuted: isLocalMicMutedState(),
       camOff: screenSharing ? false : isLocalCamOffState(),
       handRaised: localHandRaised,
+      recordingAllowed,
     };
+  }
+
+  function disableRecordingForCall(source = "unknown") {
+    if (!recordingAllowed) return;
+    recordingAllowed = false;
+    showToast(
+      source === "local"
+        ? "You declined recording consent. Recording is disabled for everyone in this call."
+        : "Recording was disabled for this call because a participant declined consent.",
+      "warning"
+    );
+    broadcastProfile(true);
   }
 
   function isLocalMicMutedState() {
@@ -1162,12 +1177,9 @@ const VideoChat = (() => {
         incomingCall.close();
         return;
       }
-      if (!consentGiven) {
+      if (!consentPromptHandled) {
         const ok = await askConsent(incomingCall.peer);
-        if (!ok) {
-          incomingCall.close();
-          return;
-        }
+        if (!ok) disableRecordingForCall("local");
       }
 
       const mediaOk = await startLocalMedia();
@@ -1518,6 +1530,9 @@ const VideoChat = (() => {
           typeof data.id === "string" && data.id.trim() ? data.id.trim() : conn.peer;
         if (incomingPeerId === conn.peer) {
           upsertRemoteProfile(conn.peer, data);
+          if (data && data.recordingAllowed === false) {
+            disableRecordingForCall("remote");
+          }
         }
         return;
       }
@@ -1658,9 +1673,9 @@ const VideoChat = (() => {
       return false;
     }
 
-    if (!consentGiven) {
+    if (!consentPromptHandled) {
       const ok = await askConsent("the remote participant");
-      if (!ok) return false;
+      if (!ok) disableRecordingForCall("local");
     }
 
     const ok = await startLocalMedia();
@@ -1940,13 +1955,13 @@ const VideoChat = (() => {
     }
     updateParticipantsList();
     showToast("Call ended", "info");
-    // Record consent end
-    ConsentManager &&
+    if (ConsentManager) {
       ConsentManager.record({
-        type: "recorded",
-        name: "Call session ended",
+        type: recordingAllowed ? "recorded" : "withdrawn",
+        name: recordingAllowed ? "Call session ended" : "Recording disabled for call",
         details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()}`,
       });
+    }
     isEndingCall = false;
   }
 
@@ -2382,7 +2397,8 @@ const VideoChat = (() => {
       overlay.innerHTML = `
         <div class="modal" style="max-width:440px">
           <h3 style="display:flex;align-items:center;gap:0.5rem"><i class="fa-solid fa-shield-halved text-primary" aria-hidden="true"></i>Recording Consent Required</h3>
-          <p>This call may be recorded for AI notes and security purposes. Do you consent to participate in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>?</p>
+          <p>This call may be recorded for AI notes and security purposes. If anyone declines, you can still join — but recording will be disabled for everyone.</p>
+          <p>Do you consent to participate in this secure call with <strong id="consent-caller-name" style="color:#fff"></strong>?</p>
           <div class="alert alert-info" style="margin-bottom:1rem">
             <i class="fa-solid fa-circle-info text-primary" aria-hidden="true"></i>
             <span>Consent is cryptographically timestamped and stored locally. You can withdraw at any time.</span>
@@ -2399,6 +2415,7 @@ const VideoChat = (() => {
 
       overlay.querySelector("#consent-allow").onclick = () => {
         consentGiven = true;
+        consentPromptHandled = true;
         overlay.remove();
         ConsentManager &&
           ConsentManager.record({
@@ -2409,7 +2426,15 @@ const VideoChat = (() => {
         resolve(true);
       };
       overlay.querySelector("#consent-deny").onclick = () => {
+        consentPromptHandled = true;
+        disableRecordingForCall("local");
         overlay.remove();
+        ConsentManager &&
+          ConsentManager.record({
+            type: "withdrawn",
+            name: `Consent declined for call with ${callerName}`,
+            details: `Session ID: ${state.sessionId}`,
+          });
         resolve(false);
       };
     });

@@ -25,7 +25,14 @@ sys.modules['workers'] = mock_workers
 # Fix the path so it finds your 'src' folder
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Now the import will work perfectly!
-from src.libs.utils import html_response, json_response, cors_response
+from src.libs.utils import html_response, json_response, cors_response, security_headers
+
+
+CRITICAL_SECURITY_DIRECTIVES = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
 
 
 def test_html_response():
@@ -38,6 +45,11 @@ def test_html_response():
     assert "<h1>Test Page</h1>" in response.body.decode('utf-8')
     #fix for issue 2
     assert response.headers["Access-Control-Allow-Origin"] == "*"
+    # Security headers exist
+    for key, value in security_headers().items():
+        assert response.headers.get(key) == value
+    for key, value in CRITICAL_SECURITY_DIRECTIVES.items():
+        assert response.headers.get(key) == value
 
 def test_json_response():
     """Test that json_response correctly formats a dict to JSON."""
@@ -49,6 +61,8 @@ def test_json_response():
     assert json.loads(response.body) == data
     #fix for issue 2
     assert response.headers["Access-Control-Allow-Origin"] == "*"
+    for key, value in security_headers().items():
+        assert response.headers.get(key) == value
 
 def test_cors_response():
     """Test that cors_response injects the correct CORS headers."""
@@ -59,6 +73,8 @@ def test_cors_response():
     assert response.headers["Access-Control-Allow-Methods"] == "GET, POST, OPTIONS"
     assert response.headers["Access-Control-Allow-Headers"] == "Content-Type"
     assert response.headers["Access-Control-Max-Age"] == "86400"
+    for key, value in security_headers().items():
+        assert response.headers.get(key) == value
 
 def test_json_response_default_str_fallback():
     """
