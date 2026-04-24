@@ -16,6 +16,7 @@ const VideoChat = (() => {
   let camOff = true;
   let consentGiven = false;
   let consentPromptHandled = false;
+  let consentPromptInFlight = null;
   let recordingAllowed = true;
   let screenSharing = false;
   let activeScreenStream = null;
@@ -305,6 +306,16 @@ const VideoChat = (() => {
       "warning"
     );
     broadcastProfile(true);
+  }
+
+  async function ensureConsentPrompt(callerLabel) {
+    if (consentPromptHandled) return Boolean(consentGiven);
+    if (!consentPromptInFlight) {
+      consentPromptInFlight = askConsent(callerLabel);
+    }
+    const ok = await consentPromptInFlight;
+    consentPromptInFlight = null;
+    return Boolean(ok);
   }
 
   function isLocalMicMutedState() {
@@ -1178,7 +1189,7 @@ const VideoChat = (() => {
         return;
       }
       if (!consentPromptHandled) {
-        const ok = await askConsent(incomingCall.peer);
+        const ok = await ensureConsentPrompt(incomingCall.peer);
         if (!ok) disableRecordingForCall("local");
       }
 
@@ -1674,7 +1685,7 @@ const VideoChat = (() => {
     }
 
     if (!consentPromptHandled) {
-      const ok = await askConsent("the remote participant");
+      const ok = await ensureConsentPrompt("the remote participant");
       if (!ok) disableRecordingForCall("local");
     }
 
@@ -1935,6 +1946,10 @@ const VideoChat = (() => {
     localHandRaised = false;
     walkieFloorHolder = null;
     walkieTalkieMode = false;
+    consentPromptHandled = false;
+    consentPromptInFlight = null;
+    consentGiven = false;
+    recordingAllowed = true;
     syncRaiseHandButton();
     state.connected = false;
     updateStatus("fa-solid fa-phone-slash", "Call ended", "muted");
@@ -1955,13 +1970,12 @@ const VideoChat = (() => {
     }
     updateParticipantsList();
     showToast("Call ended", "info");
-    if (ConsentManager) {
+    ConsentManager &&
       ConsentManager.record({
-        type: recordingAllowed ? "recorded" : "withdrawn",
-        name: recordingAllowed ? "Call session ended" : "Recording disabled for call",
-        details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()}`,
+        type: "ended",
+        name: "Call session ended",
+        details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()} (recordingAllowed=${recordingAllowed})`,
       });
-    }
     isEndingCall = false;
   }
 
@@ -2431,7 +2445,7 @@ const VideoChat = (() => {
         overlay.remove();
         ConsentManager &&
           ConsentManager.record({
-            type: "withdrawn",
+            type: "declined",
             name: `Consent declined for call with ${callerName}`,
             details: `Session ID: ${state.sessionId}`,
           });

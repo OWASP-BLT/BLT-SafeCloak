@@ -21,15 +21,20 @@ _SECURITY_HEADERS: Dict[str, str] = {
     "DENY",
     "Referrer-Policy":
     "no-referrer",
-    # Report-only so we can harden iteratively without breaking pages.
+    # CSP is report-only so we can harden iteratively without breaking pages.
+    "Reporting-Endpoints":
+    'csp-endpoint="/_csp-report"',
     "Content-Security-Policy-Report-Only": ("default-src 'none'; "
                                             "base-uri 'none'; "
                                             "form-action 'none'; "
-                                            "frame-ancestors 'none'"),
+                                            "frame-ancestors 'none'; "
+                                            "report-to csp-endpoint; "
+                                            "report-uri /_csp-report"),
 }
 
 
 def security_headers() -> Dict[str, str]:
+    """Return a fresh copy of the default security headers."""
     return _SECURITY_HEADERS.copy()
 
 
