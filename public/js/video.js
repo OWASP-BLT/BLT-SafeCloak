@@ -17,6 +17,17 @@ const VideoChat = (() => {
   let consentGiven = false;
   let screenSharing = false;
   let activeScreenStream = null;
+  let statsTimer = null;
+  let healthPanelIdle = false;
+  let healthUpdateInFlight = false;
+  let healthUpdatePending = false;
+  const statsSnapshot = new Map(); // peerId -> { ts, inBytes, outBytes }
+  const healthHistory = {
+    score: [],
+    rtt: [],
+    loss: [],
+    maxPoints: 40,
+  };
   let localHandRaised = false;
   let inviteAutoJoinAttempted = false;
   let inviteAutoJoinRoomId = "";
@@ -61,6 +72,13 @@ const VideoChat = (() => {
 
   /* ── DOM helpers ── */
   const $ = (id) => document.getElementById(id);
+  const escapeHtml = (value) =>
+    String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
 
   function updateStatus(iconClass, text, type = "muted") {
     const el = $("connection-status");
@@ -640,6 +658,420 @@ const VideoChat = (() => {
     const conn = peer.connect(remotePeerId);
     setupDataConn(conn);
     return conn;
+  }
+
+  /* ── Call health panel ── */
+  function setSummaryChip(label, tone) {
+    const chip = $("call-health-summary");
+    if (!chip) return;
+    chip.textContent = label;
+    chip.className = `health-chip ${tone}`;
+  }
+
+  function setCallHealthView(summary, latency, stability, tip) {
+    setSummaryChip(summary.label, summary.tone);
+    if ($("call-health-latency")) $("call-health-latency").textContent = latency;
+    if ($("call-health-stability")) $("call-health-stability").textContent = stability;
+    if ($("call-health-tip")) $("call-health-tip").textContent = tip;
+    if ($("call-health-live")) {
+      $("call-health-live").textContent = `Overall ${summary.label}. Latency ${latency}. Stability ${stability}. ${tip}`;
+    }
+  }
+
+  function renderTechRows(rows) {
+    const body = $("tech-details-body");
+    if (!body) return;
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="6" class="tech-table-empty">No active peers yet.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows
+      .map((r) => {
+        const d = r.raw;
+        const rtt = formatTechMs(d.rttMs);
+        const jitter = formatTechMs(d.jitterMs);
+        const loss = formatTechLossPct(d.lossPct);
+        const downUp = formatTechDownUp(d.downKbps, d.upKbps);
+        return `
+      <tr>
+        <td class="font-mono">${escapeHtml(r.peer)}</td>
+        <td class="tech-cell-state">${escapeHtml(r.state)}</td>
+        <td>${escapeHtml(rtt)}</td>
+        <td>${escapeHtml(jitter)}</td>
+        <td>${escapeHtml(loss)}</td>
+        <td>${escapeHtml(downUp)}</td>
+      </tr>
+    `;
+      })
+      .join("");
+  }
+
+  function resetCallHealthPanel() {
+    healthPanelIdle = true;
+    setCallHealthView(
+      { label: "Idle", tone: "quality-idle" },
+      "--",
+      "--",
+      "Connect to a participant to start live quality checks."
+    );
+    renderTechRows([]);
+    statsSnapshot.clear();
+    healthHistory.score = [];
+    healthHistory.rtt = [];
+    healthHistory.loss = [];
+    renderHealthCharts();
+  }
+
+  function classifyQuality(score) {
+    if (score >= 85) return { label: "Excellent", tone: "quality-excellent" };
+    if (score >= 70) return { label: "Good", tone: "quality-good" };
+    if (score >= 50) return { label: "Fair", tone: "quality-fair" };
+    return { label: "Poor", tone: "quality-poor" };
+  }
+
+  function latencyLabel(rttMs) {
+    if (rttMs == null) return "Unknown";
+    if (rttMs < 120) return "Low";
+    if (rttMs < 250) return "Medium";
+    return "High";
+  }
+
+  function stabilityLabel(lossPct, jitterMs) {
+    if (lossPct == null && jitterMs == null) return "Unknown";
+    if ((lossPct || 0) < 1.5 && (jitterMs || 0) < 12) return "Stable";
+    if ((lossPct || 0) < 4.5 && (jitterMs || 0) < 25) return "Mostly stable";
+    return "Unstable";
+  }
+
+  function healthTip(score) {
+    if (score >= 85) return "Connection is healthy. Audio/video should be smooth.";
+    if (score >= 70) return "Minor fluctuation detected. Keep screen share off if quality drops.";
+    if (score >= 50) return "Some instability detected. Try disabling camera for better audio.";
+    return "Network quality is low. Move closer to Wi-Fi or pause screen sharing.";
+  }
+
+  function pushHistory(series, value) {
+    if (typeof value !== "number" || !isFinite(value)) return;
+    // For the quality chart, anchor the first point at baseline so trend starts from bottom.
+    if (series === healthHistory.score && series.length === 0) {
+      series.push(0);
+    }
+    series.push(value);
+    if (series.length > healthHistory.maxPoints) series.shift();
+  }
+
+  function setupHiDPICanvas(canvas, fallbackWidth = 280, fallbackHeight = 80) {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width || fallbackWidth));
+    const height = Math.max(1, Math.round(rect.height || fallbackHeight));
+    const nextWidth = Math.round(width * dpr);
+    const nextHeight = Math.round(height * dpr);
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    // Reset transform first to avoid compounding scale on repeated renders.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    return { ctx, width, height };
+  }
+
+  function drawLine(ctx, width, height, values, maxValue, color, options = {}) {
+    if (!values.length) return;
+    const stepX = values.length > 1 ? width / (values.length - 1) : width;
+    const topPx = typeof options.topPx === "number" ? options.topPx : 4;
+    const bottomPx = typeof options.bottomPx === "number" ? options.bottomPx : height - 4;
+    const range = Math.max(1, bottomPx - topPx);
+    ctx.beginPath();
+    values.forEach((value, i) => {
+      const x = i * stepX;
+      const normalized = Math.max(0, Math.min(1, value / maxValue));
+      const y = bottomPx - normalized * range;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+
+  function drawGrid(ctx, width, height) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i += 1) {
+      const y = (height / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+  }
+
+  function renderHealthCharts() {
+    const qualityCanvas = $("quality-trend-canvas");
+    const networkCanvas = $("network-trend-canvas");
+    if (!qualityCanvas || !networkCanvas) return;
+
+    const qualitySurface = setupHiDPICanvas(qualityCanvas, 280, 80);
+    const networkSurface = setupHiDPICanvas(networkCanvas, 280, 80);
+    if (!qualitySurface || !networkSurface) return;
+    const { ctx: qCtx, width: qW, height: qH } = qualitySurface;
+    const { ctx: nCtx, width: nW, height: nH } = networkSurface;
+
+    drawGrid(qCtx, qW, qH);
+    drawLine(qCtx, qW, qH, healthHistory.score, 100, "#2563eb");
+
+    drawGrid(nCtx, nW, nH);
+    const dividerY = Math.round(nH * 0.75);
+    nCtx.beginPath();
+    nCtx.moveTo(0, dividerY);
+    nCtx.lineTo(nW, dividerY);
+    nCtx.strokeStyle = "#cbd5e1";
+    nCtx.lineWidth = 1;
+    nCtx.setLineDash([4, 3]);
+    nCtx.stroke();
+    nCtx.setLineDash([]);
+
+    // RTT in upper band
+    drawLine(nCtx, nW, nH, healthHistory.rtt, 400, "#7c3aed", {
+      topPx: 4,
+      bottomPx: Math.round(nH * 0.7),
+    });
+    // Loss in lower band for clearer separation
+    drawLine(nCtx, nW, nH, healthHistory.loss, 5, "#dc2626", {
+      topPx: Math.round(nH * 0.8),
+      bottomPx: nH - 4,
+    });
+  }
+
+  async function collectPeerStats(peerId, call) {
+    const pc = call && call.peerConnection;
+    if (!pc || typeof pc.getStats !== "function") return null;
+
+    let rttMs = null;
+    let jitterMs = null;
+    let packetsLost = 0;
+    let packetsRecv = 0;
+    let bytesIn = 0;
+    let bytesOut = 0;
+
+    try {
+      const report = await pc.getStats();
+      report.forEach((stat) => {
+        if (
+          stat.type === "candidate-pair" &&
+          (stat.nominated || stat.selected || stat.state === "succeeded")
+        ) {
+          if (typeof stat.currentRoundTripTime === "number") {
+            rttMs = stat.currentRoundTripTime * 1000;
+          }
+          if (typeof stat.bytesReceived === "number") bytesIn = Math.max(bytesIn, stat.bytesReceived);
+          if (typeof stat.bytesSent === "number") bytesOut = Math.max(bytesOut, stat.bytesSent);
+        }
+
+        if (stat.type === "inbound-rtp" && !stat.isRemote) {
+          if (typeof stat.packetsLost === "number") packetsLost += stat.packetsLost;
+          if (typeof stat.packetsReceived === "number") packetsRecv += stat.packetsReceived;
+          if (typeof stat.jitter === "number") jitterMs = Math.max(jitterMs || 0, stat.jitter * 1000);
+          if (typeof stat.bytesReceived === "number") bytesIn = Math.max(bytesIn, stat.bytesReceived);
+        }
+
+        if (stat.type === "outbound-rtp" && !stat.isRemote) {
+          if (typeof stat.bytesSent === "number") bytesOut = Math.max(bytesOut, stat.bytesSent);
+        }
+      });
+    } catch (err) {
+      console.error("collectPeerStats: getStats failed", {
+        peerId,
+        pcState: pc.connectionState || "unknown",
+        error: err,
+      });
+      return null;
+    }
+
+    const now = Date.now();
+    const prev = statsSnapshot.get(peerId);
+    let downKbps = null;
+    let upKbps = null;
+    if (prev && now > prev.ts) {
+      const dt = (now - prev.ts) / 1000;
+      if (bytesIn >= prev.inBytes) downKbps = ((bytesIn - prev.inBytes) * 8) / 1000 / dt;
+      if (bytesOut >= prev.outBytes) upKbps = ((bytesOut - prev.outBytes) * 8) / 1000 / dt;
+    }
+    statsSnapshot.set(peerId, { ts: now, inBytes: bytesIn, outBytes: bytesOut });
+
+    const lossPct =
+      packetsRecv + packetsLost > 0 ? (packetsLost / (packetsRecv + packetsLost)) * 100 : null;
+
+    return {
+      peer: peerId,
+      state: pc.connectionState || "unknown",
+      rttMs,
+      jitterMs,
+      lossPct,
+      downKbps,
+      upKbps,
+    };
+  }
+
+  /** Unitless values for the technical-details card (units live in <dt> labels). */
+  function formatTechMs(v) {
+    return typeof v === "number" && isFinite(v) ? String(Math.round(v)) : "--";
+  }
+
+  function formatTechLossPct(v) {
+    return typeof v === "number" && isFinite(v) ? v.toFixed(1) : "--";
+  }
+
+  function formatTechKbps(v) {
+    return typeof v === "number" && isFinite(v) ? String(Math.round(v)) : "--";
+  }
+
+  function formatTechDownUp(downKbps, upKbps) {
+    return `${formatTechKbps(downKbps)} / ${formatTechKbps(upKbps)}`;
+  }
+
+  async function updateCallHealthPanel() {
+    if (healthUpdateInFlight) {
+      healthUpdatePending = true;
+      return;
+    }
+    healthUpdateInFlight = true;
+    try {
+      if (activeCalls.size === 0) {
+        if (!healthPanelIdle) {
+          resetCallHealthPanel();
+        }
+        return;
+      }
+      healthPanelIdle = false;
+
+      const peerEntries = Array.from(activeCalls.entries());
+      const statsList = await Promise.all(
+        peerEntries.map(([peerId, call]) => collectPeerStats(peerId, call))
+      );
+
+      /* If the mesh changed or ended while getStats was in flight, do not paint stale results. */
+      if (activeCalls.size === 0) {
+        if (!healthPanelIdle) resetCallHealthPanel();
+        return;
+      }
+      if (peerEntries.some(([id]) => !activeCalls.has(id))) {
+        healthUpdatePending = true;
+        return;
+      }
+
+      const rows = statsList
+        .filter(Boolean)
+        .map((s) => ({
+          peer: s.peer,
+          state: s.state,
+          raw: s,
+        }));
+
+      renderTechRows(rows);
+      if (!rows.length) {
+        setCallHealthView(
+          { label: "Connecting", tone: "quality-fair" },
+          "Unknown",
+          "Unknown",
+          "Collecting stats from peers..."
+        );
+        return;
+      }
+
+      const avg = rows.reduce(
+        (acc, r) => {
+          const s = r.raw;
+          if (s.rttMs != null) {
+            acc.rtt += s.rttMs;
+            acc.rttCount += 1;
+          }
+          if (s.jitterMs != null) {
+            acc.jitter += s.jitterMs;
+            acc.jitterCount += 1;
+          }
+          if (s.lossPct != null) {
+            acc.loss += s.lossPct;
+            acc.lossCount += 1;
+          }
+          return acc;
+        },
+        { rtt: 0, jitter: 0, loss: 0, rttCount: 0, jitterCount: 0, lossCount: 0 }
+      );
+
+      const avgRtt = avg.rttCount ? avg.rtt / avg.rttCount : null;
+      const avgJitter = avg.jitterCount ? avg.jitter / avg.jitterCount : null;
+      const avgLoss = avg.lossCount ? avg.loss / avg.lossCount : null;
+
+      let score = 100;
+      if (avgRtt != null) {
+        if (avgRtt >= 300) score -= 40;
+        else if (avgRtt >= 180) score -= 25;
+        else if (avgRtt >= 120) score -= 12;
+      }
+      if (avgJitter != null) {
+        if (avgJitter >= 30) score -= 28;
+        else if (avgJitter >= 18) score -= 16;
+        else if (avgJitter >= 10) score -= 8;
+      }
+      if (avgLoss != null) {
+        if (avgLoss >= 8) score -= 35;
+        else if (avgLoss >= 4) score -= 22;
+        else if (avgLoss >= 1.5) score -= 10;
+      }
+      score = Math.max(0, Math.min(100, score));
+
+      const quality = classifyQuality(score);
+      pushHistory(healthHistory.score, score);
+      if (avgRtt != null) pushHistory(healthHistory.rtt, Math.min(avgRtt, 400));
+      if (avgLoss != null) pushHistory(healthHistory.loss, Math.min(avgLoss, 5));
+      renderHealthCharts();
+      setCallHealthView(
+        quality,
+        latencyLabel(avgRtt),
+        stabilityLabel(avgLoss, avgJitter),
+        healthTip(score)
+      );
+    } finally {
+      healthUpdateInFlight = false;
+      if (healthUpdatePending) {
+        healthUpdatePending = false;
+        void updateCallHealthPanel();
+      }
+    }
+  }
+
+  function startStatsMonitoring() {
+    if (statsTimer) clearTimeout(statsTimer);
+    resetCallHealthPanel();
+    let cancelled = false;
+    const run = async () => {
+      if (cancelled) return;
+      await updateCallHealthPanel();
+      if (cancelled) return;
+      statsTimer = setTimeout(run, 3000);
+    };
+    statsTimer = setTimeout(run, 0);
+    startStatsMonitoring._cancel = () => {
+      cancelled = true;
+    };
+  }
+
+  function stopStatsMonitoring() {
+    if (statsTimer) {
+      clearTimeout(statsTimer);
+      statsTimer = null;
+    }
+    if (typeof startStatsMonitoring._cancel === "function") {
+      startStatsMonitoring._cancel();
+      startStatsMonitoring._cancel = null;
+    }
+    resetCallHealthPanel();
   }
 
   /* ── Browser detection ── */
@@ -1255,6 +1687,7 @@ const VideoChat = (() => {
       empty.className = "text-sm text-gray-500 text-center py-2";
       empty.textContent = "No participants connected";
       listEl.appendChild(empty);
+      updateCallHealthPanel();
       return;
     }
 
@@ -1384,6 +1817,7 @@ const VideoChat = (() => {
       item.appendChild(actionsSpan);
       listEl.appendChild(item);
     });
+    updateCallHealthPanel();
   }
 
   function syncRaiseHandButton() {
@@ -1954,6 +2388,7 @@ const VideoChat = (() => {
     const { navigateHome = true } = options;
 
     await endCall();
+    stopStatsMonitoring();
     if (peer) {
       try {
         peer.disconnect();
@@ -2615,6 +3050,30 @@ const VideoChat = (() => {
   }
 
   async function init() {
+    const graphToggle = $("toggle-health-graphs");
+    const graphsPanel = $("health-charts");
+    if (graphToggle && graphsPanel) {
+      graphToggle.addEventListener("click", () => {
+        const isHidden = graphsPanel.classList.toggle("hidden");
+        graphToggle.setAttribute("aria-expanded", isHidden ? "false" : "true");
+        graphToggle.innerHTML = isHidden
+          ? '<i class="fa-solid fa-chart-line mr-1" aria-hidden="true"></i>Show Graphs'
+          : '<i class="fa-solid fa-chart-line mr-1" aria-hidden="true"></i>Hide Graphs';
+      });
+    }
+
+    const techToggle = $("toggle-tech-details");
+    const techPanel = $("tech-details-panel");
+    if (techToggle && techPanel) {
+      techToggle.addEventListener("click", () => {
+        const isHidden = techPanel.classList.toggle("hidden");
+        techToggle.setAttribute("aria-expanded", isHidden ? "false" : "true");
+        techToggle.innerHTML = isHidden
+          ? '<i class="fa-solid fa-wrench mr-1" aria-hidden="true"></i>Show Technical Details'
+          : '<i class="fa-solid fa-wrench mr-1" aria-hidden="true"></i>Hide Technical Details';
+      });
+    }
+
     state.displayName = resolveDisplayName();
     state.displayInitials = makeInitials(state.displayName);
 
@@ -2642,6 +3101,7 @@ const VideoChat = (() => {
 
     // Always init peer regardless of success of startLocalMedia (can join without media)
     await initPeer();
+    startStatsMonitoring();
     checkInitialPermissions();
     const pushToTalkBtn = $("btn-push-to-talk");
     if (pushToTalkBtn) {

@@ -165,7 +165,7 @@
           </div>
         </div>
 
-        <div class="grid gap-4 xl:grid-cols-[1fr_320px]" id="main-grid">
+        <div class="grid gap-4 xl:grid-cols-[1fr_minmax(22rem,26rem)]" id="main-grid">
           <section class="flex min-h-[64vh] flex-col gap-4 pb-52">
             <div
               class="video-grid rounded-2xl border border-neutral-border bg-white p-3 shadow-sm"
@@ -397,7 +397,125 @@
             </div>
           </section>
 
-          <aside aria-label="Room setup and connection info" class="space-y-4">
+          <aside aria-label="Room setup, call quality, and connection info" class="space-y-4 lg:min-w-0">
+            <div class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm">
+              <h2
+                class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700"
+              >
+                <i class="fa-solid fa-signal text-primary" aria-hidden="true"></i>
+                Call Health
+              </h2>
+              <div class="health-grid">
+                <div class="health-item">
+                  <span class="health-label">Overall</span>
+                  <span class="health-chip quality-idle" id="call-health-summary">Idle</span>
+                </div>
+                <div class="health-item">
+                  <span class="health-label">Latency</span>
+                  <span class="health-value" id="call-health-latency">--</span>
+                </div>
+                <div class="health-item">
+                  <span class="health-label">Stability</span>
+                  <span class="health-value" id="call-health-stability">--</span>
+                </div>
+              </div>
+              <div class="sr-only" id="call-health-live" aria-live="polite" aria-atomic="true">
+                Overall Idle. Connect to a participant to start live quality checks.
+              </div>
+              <p class="health-tip mt-3 text-sm text-gray-600" id="call-health-tip" aria-hidden="true">
+                Connect to a participant to start live quality checks.
+              </p>
+              <button
+                class="btn btn-secondary mt-2 w-full"
+                id="toggle-health-graphs"
+                type="button"
+                aria-expanded="true"
+                aria-controls="health-charts"
+              >
+                <i class="fa-solid fa-chart-line mr-1" aria-hidden="true"></i>
+                Hide Graphs
+              </button>
+              <div id="health-charts" class="health-charts mt-3" aria-label="Call quality trends">
+                <div class="health-chart-card">
+                  <div class="health-chart-head">
+                    <span>Quality Trend</span>
+                    <span class="text-xs text-gray-500">last ~2 min</span>
+                  </div>
+                  <canvas
+                    id="quality-trend-canvas"
+                    width="280"
+                    height="80"
+                    role="img"
+                    aria-label="Quality trend chart showing overall call quality over time"
+                  >
+                    Quality trend chart. If this chart is unavailable, use the Overall, Latency, and
+                    Stability values shown above.
+                  </canvas>
+                </div>
+                <div class="health-chart-card">
+                  <div class="health-chart-head">
+                    <span>Network Trend</span>
+                    <span class="text-xs text-gray-500">RTT + Loss</span>
+                  </div>
+                  <div class="health-chart-legend" aria-label="Network trend legend">
+                    <span class="legend-item"
+                      ><span class="legend-dot legend-rtt" aria-hidden="true"></span>RTT (ms)</span
+                    >
+                    <span class="legend-item"
+                      ><span class="legend-dot legend-loss" aria-hidden="true"></span>Loss (%)</span
+                    >
+                  </div>
+                  <canvas
+                    id="network-trend-canvas"
+                    width="280"
+                    height="80"
+                    role="img"
+                    aria-label="Network trend chart showing RTT in milliseconds and packet loss percentage over time"
+                  >
+                    Network trend chart. RTT and packet loss trends are also available in the technical
+                    details table.
+                  </canvas>
+                </div>
+              </div>
+
+              <button
+                class="btn btn-secondary mt-3 w-full"
+                id="toggle-tech-details"
+                type="button"
+                aria-expanded="false"
+                aria-controls="tech-details-panel"
+              >
+                <i class="fa-solid fa-wrench mr-1" aria-hidden="true"></i>
+                Show Technical Details
+              </button>
+
+              <div id="tech-details-panel" class="tech-details-panel hidden">
+                <div class="tech-details-head">
+                  <span>For technical users</span>
+                  <span class="text-xs text-gray-500">Updates every 3s</span>
+                </div>
+                <div class="tech-table-wrap">
+                  <table class="tech-table" aria-label="Technical call quality details">
+                    <thead>
+                      <tr>
+                        <th scope="col">Peer</th>
+                        <th scope="col">State</th>
+                        <th scope="col">RTT (ms)</th>
+                        <th scope="col">Jitter (ms)</th>
+                        <th scope="col">Loss (%)</th>
+                        <th scope="col">Down/up (kbps)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tech-details-body">
+                      <tr>
+                        <td colspan="6" class="tech-table-empty">No active peers yet.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
             <div class="rounded-2xl border border-neutral-border bg-white p-4 shadow-sm">
               <h2
                 class="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700"
@@ -573,7 +691,7 @@
             class="control-btn end-call rounded-full border border-red-600 bg-red-600 text-white"
             id="btn-end"
             title="End call"
-            onclick="VideoChat.hangup()"
+            onclick="VideoChat.hangup({ navigateHome: false })"
             aria-label="End call"
           >
             <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
