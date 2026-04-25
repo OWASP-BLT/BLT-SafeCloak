@@ -30,6 +30,30 @@ class Default(WorkerEntrypoint):
             if request.method == 'POST' and path == '/_csp-report':
                 # Best-effort endpoint for CSP violation reports. We don't persist
                 # reports yet, but enabling collection allows future analysis.
+                #
+                # Keep this handler defensive since it may receive arbitrary traffic.
+                headers = getattr(request, 'headers', None)
+                content_type = headers.get('content-type') if headers else None
+                allowed_types = {'application/csp-report', 'application/reports+json'}
+                if content_type:
+                    content_type = content_type.split(';', 1)[0].strip().lower()
+                    if content_type not in allowed_types:
+                        return Response(
+                            'Unsupported Media Type',
+                            status=415,
+                            headers=base_headers('text/plain; charset=utf-8')
+                        )
+                content_length = headers.get('content-length') if headers else None
+                try:
+                    if content_length and int(content_length) > 32_768:
+                        return Response(
+                            'Payload Too Large',
+                            status=413,
+                            headers=base_headers('text/plain; charset=utf-8')
+                        )
+                except (TypeError, ValueError):
+                    # Ignore malformed content-length and treat as unknown size.
+                    pass
                 return Response(
                     None,
                     status=204,

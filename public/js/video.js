@@ -1918,6 +1918,7 @@ const VideoChat = (() => {
   async function endCall(options = {}) {
     const { keepEndControlVisible = false } = options;
     isEndingCall = true;
+    const finalRecordingAllowed = recordingAllowed;
 
     activeCalls.forEach((call) => {
       try {
@@ -1946,10 +1947,6 @@ const VideoChat = (() => {
     localHandRaised = false;
     walkieFloorHolder = null;
     walkieTalkieMode = false;
-    consentPromptHandled = false;
-    consentPromptInFlight = null;
-    consentGiven = false;
-    recordingAllowed = true;
     syncRaiseHandButton();
     state.connected = false;
     updateStatus("fa-solid fa-phone-slash", "Call ended", "muted");
@@ -1974,8 +1971,12 @@ const VideoChat = (() => {
       ConsentManager.record({
         type: "ended",
         name: "Call session ended",
-        details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()} (recordingAllowed=${recordingAllowed})`,
+        details: `Session ID: ${state.sessionId} — ended at ${new Date().toISOString()} (recordingAllowed=${finalRecordingAllowed})`,
       });
+    consentPromptHandled = false;
+    consentPromptInFlight = null;
+    consentGiven = false;
+    recordingAllowed = true;
     isEndingCall = false;
   }
 
