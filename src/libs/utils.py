@@ -15,21 +15,19 @@ import json
 from typing import Any, Dict
 
 _SECURITY_HEADERS: Dict[str, str] = {
-    "X-Content-Type-Options":
-    "nosniff",
-    "X-Frame-Options":
-    "DENY",
-    "Referrer-Policy":
-    "no-referrer",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
     # CSP is report-only so we can harden iteratively without breaking pages.
-    "Reporting-Endpoints":
-    'csp-endpoint="/_csp-report"',
-    "Content-Security-Policy-Report-Only": ("default-src 'none'; "
-                                            "base-uri 'none'; "
-                                            "form-action 'none'; "
-                                            "frame-ancestors 'none'; "
-                                            "report-to csp-endpoint; "
-                                            "report-uri /_csp-report"),
+    'Reporting-Endpoints': 'csp-endpoint="/_csp-report"',
+    'Content-Security-Policy-Report-Only': (
+        "default-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "frame-ancestors 'none'; "
+        "report-to csp-endpoint; "
+        "report-uri /_csp-report"
+    ),
 }
 
 
@@ -55,9 +53,10 @@ def base_headers(content_type: str) -> Dict[str, str]:
         Dictionary of headers
     """
     return {
-        "Content-Type": content_type,
+        'Content-Type': content_type,
+
         # Allows any origin to access the response
-        "Access-Control-Allow-Origin": "*",
+        'Access-Control-Allow-Origin': '*',
         **security_headers(),
     }
 
@@ -76,7 +75,7 @@ def html_response(html_str: str, status: int = 200) -> Response:
     return Response(
         html_str,
         status=status,
-        headers=base_headers("text/html; charset=utf-8"),
+        headers=base_headers('text/html; charset=utf-8')
     )
 
 
@@ -99,10 +98,10 @@ def json_response(data: Any, status: int = 200) -> Response:
         json.dumps(
             data,
             ensure_ascii=False,  # Keeps Unicode readable (e.g., हिंदी)
-            default=str  # Fallback for non-serializable objects
+            default=str          # Fallback for non-serializable objects
         ),
         status=status,
-        headers=base_headers("application/json; charset=utf-8"),
+        headers=base_headers('application/json; charset=utf-8')
     )
 
 
@@ -125,17 +124,19 @@ def cors_response(status: int = 204) -> Response:
         None,  # 204 responses should not include a body
         status=status,
         headers={
-            # Allow all origins
-            "Access-Control-Allow-Origin": "*",
+            # Allow all origins 
+            'Access-Control-Allow-Origin': '*',
 
             # Allowed HTTP methods
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 
             # Allowed request headers
-            "Access-Control-Allow-Headers": "Content-Type",
+            'Access-Control-Allow-Headers': 'Content-Type',
 
             # Cache preflight response (in seconds basically 1 day)
             # Reduces repeated OPTIONS requests
-            "Access-Control-Max-Age": "86400",
+            'Access-Control-Max-Age': '86400',
             **security_headers(),
-        })
+        },
+    )
+

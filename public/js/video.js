@@ -2511,7 +2511,7 @@ const VideoChat = (() => {
     }
   }
 
-  /**
+    /**
    * Stops screen sharing, terminates the screen tracks, and restores the camera stream.
    * @returns {void}
    */
@@ -2524,7 +2524,7 @@ const VideoChat = (() => {
     showToast("Screen sharing stopped", "info");
 
     if (activeScreenStream) {
-      activeScreenStream.getTracks().forEach((track) => track.stop());
+      activeScreenStream.getTracks().forEach(track => track.stop());
       activeScreenStream = null;
     }
 
@@ -2556,19 +2556,20 @@ const VideoChat = (() => {
     }
   }
 
-  /**
+
+    /**
    * Toggles between starting and stopping screen share based on current state.
    * @returns {void}
    */
   function toggleScreenShare() {
-    if (screenSharing) {
-      stopScreenShare();
-    } else {
-      shareScreen();
-    }
-    const btn = $("btn-screen");
-    if (btn) btn.setAttribute("aria-pressed", screenSharing.toString());
+  if (screenSharing) {
+    stopScreenShare();
+  } else {
+    shareScreen();
   }
+  const btn = $("btn-screen");
+  if (btn) btn.setAttribute("aria-pressed", screenSharing.toString());
+}
 
   function readInitialMediaPreferencesFromUrl() {
     const params = new URLSearchParams(window.location.search);

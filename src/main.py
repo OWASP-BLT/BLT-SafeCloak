@@ -30,7 +30,11 @@ class Default(WorkerEntrypoint):
             if request.method == 'POST' and path == '/_csp-report':
                 # Best-effort endpoint for CSP violation reports. We don't persist
                 # reports yet, but enabling collection allows future analysis.
-                return Response(None, status=204, headers=base_headers('text/plain; charset=utf-8'))
+                return Response(
+                    None,
+                    status=204,
+                    headers=base_headers('text/plain; charset=utf-8')
+                )
 
             # Handle CORS preflight
             if request.method == 'OPTIONS':
@@ -46,19 +50,25 @@ class Default(WorkerEntrypoint):
             if hasattr(env, 'ASSETS'):
                 return await env.ASSETS.fetch(request)
 
-            return Response('Not Found',
-                            status=404,
-                            headers=base_headers('text/plain; charset=utf-8'))
+            return Response(
+                'Not Found',
+                status=404,
+                headers=base_headers('text/plain; charset=utf-8')
+            )
 
         except FileNotFoundError as exc:
             print(f'[404] Page file not found: {exc}')
-            return Response('Not Found',
-                            status=404,
-                            headers=base_headers('text/plain; charset=utf-8'))
+            return Response(
+                'Not Found',
+                status=404,
+                headers=base_headers('text/plain; charset=utf-8')
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             traceback.print_exc()
-            return Response('Internal Server Error',
-                            status=500,
-                            headers=base_headers('text/plain; charset=utf-8'))
+            return Response(
+                'Internal Server Error',
+                status=500,
+                headers=base_headers('text/plain; charset=utf-8')
+            )
