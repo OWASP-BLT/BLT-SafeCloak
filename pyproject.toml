@@ -3,17 +3,23 @@ name = "blt-safecloak"
 version = "0.1.0"
 description = "Privacy-focused peer-to-peer communication platform"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
+    "workers-py",
     # Add your production dependencies here
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "workers-runtime-sdk",
     "yapf>=0.40.0",
     "mypy>=1.8.0",
+    "pytest>=8.0.0",
+    "playwright>=1.44.0",
+    "djlint>=1.36.4",
+    "ruff>=0.15.9",
 ]
 
 [build-system]
@@ -26,7 +32,7 @@ column_limit = 100
 indent_width = 4
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
@@ -37,3 +43,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.djlint]
+profile = "django"
+indent = 2

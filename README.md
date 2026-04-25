@@ -19,53 +19,54 @@ Privacy-focused peer-to-peer communication platform built on Cloudflare Workers.
 
 ## Requirements
 
-- Node.js >= 18.0.0
-- Python >= 3.11
+- Python >= 3.12
 - Cloudflare account (for deployment)
 
 ## Installation
-
 ```bash
-# Install Node dependencies
-npm install
+# One-time init if needed (creates/updates config):
+uvx --from workers-py pywrangler init
 
-# Install Python development tools
-npm run setup
+# Install local dev tools (yapf/mypy/pywrangler)
+uv sync --group dev
 ```
 
 ## Development
 
 ```bash
-# Start local development server
-npm run dev
+# Start local dev server (http://localhost:8787)
+uv run pywrangler dev
 
-# Format all code (Python + HTML/CSS/JS)
-npm run format
+# Format all code (Python + HTML)
+make format
 
-# Check code quality (formatting + type checking)
-npm run check
+# Check code quality (formatting + type checking + linting)
+make check
+
+# Fix linting issues automatically
+make lint-fix
 
 # Type checking only
-npm run typecheck
+make typecheck
 
 # Check formatting without modifying
-npm run format:check
+make format-check
 ```
 
 The development server runs on `http://localhost:8787` with hot reload enabled.
 
-### Code Formatting
+### Code Quality & Formatting
 
-- **Python**: yapf (PEP 8 style, 100 char line limit)
-- **HTML/CSS/JS**: Prettier (consistent web formatting)
-- Run `npm run format` to format all files at once
+- **Python**: yapf (PEP 8 style)
+- **HTML**: djlint
+- **Linting**: ruff
+- **Type checking**: mypy
+
+Run `make format` to format code, and `make check` to validate everything.
 
 ## Deployment
-
-Deploy to Cloudflare Workers:
-
 ```bash
-npm run deploy
+uv run pywrangler deploy
 ```
 
 ### Project Structure
