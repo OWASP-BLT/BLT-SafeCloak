@@ -2,5 +2,6 @@
 -r requirements.txt
 yapf>=0.40.0
 mypy>=1.8.0
+pywrangler
 pytest>=8.0.0
 playwright>=1.44.0

@@ -19,37 +19,39 @@ Privacy-focused peer-to-peer communication platform built on Cloudflare Workers.
 
 ## Requirements
 
-- Node.js >= 18.0.0
 - Python >= 3.11
 - Cloudflare account (for deployment)
 
 ## Installation
 
 ```bash
-# Install Node dependencies
-npm install
+# Install Python development tools (includes test dependencies)
+pip install -r requirements-dev.txt
 
-# Install Python development tools
-npm run setup
+# Install Playwright browser binaries
+playwright install chromium --with-deps
 ```
 
 ## Development
 
 ```bash
 # Start local development server
-npm run dev
+make dev
 
-# Format all code (Python + HTML/CSS/JS)
-npm run format
+# Format Python code
+make format
 
 # Check code quality (formatting + type checking)
-npm run check
+make check
 
 # Type checking only
-npm run typecheck
+make typecheck
 
 # Check formatting without modifying
-npm run format:check
+make format-check
+
+# Run E2E tests (requires Playwright browser installed)
+make test
 ```
 
 The development server runs on `http://localhost:8787` with hot reload enabled.
@@ -57,15 +59,14 @@ The development server runs on `http://localhost:8787` with hot reload enabled.
 ### Code Formatting
 
 - **Python**: yapf (PEP 8 style, 100 char line limit)
-- **HTML/CSS/JS**: Prettier (consistent web formatting)
-- Run `npm run format` to format all files at once
+- Run `make format` to format Python files
 
 ## Deployment
 
 Deploy to Cloudflare Workers:
 
 ```bash
-npm run deploy
+make deploy
 ```
 
 ### Project Structure
@@ -91,8 +92,7 @@ public/
     consent.js      # Consent logic
     ui.js           # UI components and utilities
 pyproject.toml      # Python project configuration
-package.json        # NPM scripts and dependencies
-.prettierrc         # Prettier configuration
+Makefile            # Development and deployment commands
 ```
 
 ### URL Structure
