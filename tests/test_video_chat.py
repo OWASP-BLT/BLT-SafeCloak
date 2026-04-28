@@ -1429,9 +1429,9 @@ def test_video_js_chat_history_cleared_on_end_call():
 def test_video_js_chat_history_p2p_sync_send():
     """video.js must implement sendChatHistoryTo() and call it when a data connection opens."""
     js = (ROOT / "public/js/video.js").read_text(encoding="utf-8")
-    assert "function sendChatHistoryTo(remotePeerId" in js
+    assert "function sendChatHistoryTo(remotePeerId, connOverride = null)" in js
     # Must be wired into the conn.on("open") handler inside setupDataConn.
-    assert "sendChatHistoryTo(conn.peer" in js
+    assert "sendChatHistoryTo(conn.peer, conn)" in js
 
 
 def test_video_js_chat_history_p2p_sync_receive():
