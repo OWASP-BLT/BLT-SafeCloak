@@ -1429,9 +1429,9 @@ def test_video_js_chat_history_cleared_on_end_call():
 def test_video_js_chat_history_p2p_sync_send():
     """video.js must implement sendChatHistoryTo() and call it when a data connection opens."""
     js = (ROOT / "public/js/video.js").read_text(encoding="utf-8")
-    assert "function sendChatHistoryTo(remotePeerId)" in js
+    assert "function sendChatHistoryTo(remotePeerId" in js
     # Must be wired into the conn.on("open") handler inside setupDataConn.
-    assert "sendChatHistoryTo(conn.peer)" in js
+    assert "sendChatHistoryTo(conn.peer" in js
 
 
 def test_video_js_chat_history_p2p_sync_receive():
@@ -1591,3 +1591,36 @@ def test_video_lobby_js_wires_change_name_button():
     js = (ROOT / "public/js/video-lobby.js").read_text(encoding="utf-8")
     assert "btn-change-name" in js
     assert "_updateSavedNameBadge" in js
+
+
+def test_lobby_js_passes_display_name_in_room_url():
+    """video-lobby.js must include the display name as a ?name= URL parameter when
+    navigating to the video room so that resolveDisplayName() in video.js always
+    has the name available even when localStorage is unavailable."""
+    js = (ROOT / "public/js/video-lobby.js").read_text(encoding="utf-8")
+    # buildRoomUrl must accept a displayName parameter and set it in the URL.
+    assert 'function buildRoomUrl(roomId = "", displayName = "")' in js
+    assert 'target.searchParams.set("name", displayName)' in js
+    # goToRoom must forward the display name to buildRoomUrl.
+    assert "buildRoomUrl(roomId, displayName)" in js
+
+
+def test_video_js_setup_data_conn_uses_direct_conn_for_open_handler():
+    """setupDataConn must pass the specific conn that opened to sendProfileTo and
+    sendChatHistoryTo so that the correct open channel is always used, regardless
+    of whether activeDataConns has been overwritten by a simultaneous inbound
+    connection from the same peer (call-glare / double-connection race)."""
+    js = (ROOT / "public/js/video.js").read_text(encoding="utf-8")
+    # Both helper functions must accept an optional connection override.
+    assert "function sendProfileTo(peerId, force = false, connOverride = null)" in js
+    assert "function sendChatHistoryTo(remotePeerId, connOverride = null)" in js
+    # The open handler inside setupDataConn must forward the conn directly.
+    assert "sendProfileTo(conn.peer, true, conn)" in js
+    assert "sendChatHistoryTo(conn.peer, conn)" in js
+
+
+def test_video_js_chat_message_payload_includes_sender_name():
+    """sendChatMessage must embed state.displayName in every outgoing payload so
+    recipients can display the sender's name even before a profile message arrives."""
+    js = (ROOT / "public/js/video.js").read_text(encoding="utf-8")
+    assert "name: state.displayName," in js

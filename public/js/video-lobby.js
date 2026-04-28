@@ -636,10 +636,13 @@
     }
   }
 
-  function buildRoomUrl(roomId = "") {
+  function buildRoomUrl(roomId = "", displayName = "") {
     const target = new URL(`${window.location.origin}/video-room`);
     if (roomId) {
       target.searchParams.set("room", roomId);
+    }
+    if (displayName) {
+      target.searchParams.set("name", displayName);
     }
 
     const micPref = hasAudioTrack() ? (micEnabled ? "on" : "off") : "off";
@@ -678,7 +681,7 @@
     }
     persistVoicePreferences();
     persistMediaPreferences();
-    const target = buildRoomUrl(roomId);
+    const target = buildRoomUrl(roomId, displayName);
     stopPreviewStream();
     window.location.href = target.toString();
   }

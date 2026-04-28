@@ -628,8 +628,8 @@ const VideoChat = (() => {
     updateParticipantsList();
   }
 
-  function sendProfileTo(peerId, force = false) {
-    const conn = activeDataConns.get(peerId);
+  function sendProfileTo(peerId, force = false, connOverride = null) {
+    const conn = connOverride || activeDataConns.get(peerId);
     if (!conn || !conn.open || !state.peerId) return;
 
     const now = Date.now();
@@ -809,9 +809,9 @@ const VideoChat = (() => {
    * Send the current in-memory chat history to a specific peer over its open data channel.
    * This is called when a new data connection opens so late joiners see existing messages.
    */
-  function sendChatHistoryTo(remotePeerId) {
+  function sendChatHistoryTo(remotePeerId, connOverride = null) {
     if (chatHistory.length === 0) return;
-    const conn = activeDataConns.get(remotePeerId);
+    const conn = connOverride || activeDataConns.get(remotePeerId);
     if (!conn || !conn.open) return;
     const payload = {
       type: "chat-history",
@@ -1915,9 +1915,12 @@ const VideoChat = (() => {
     activeDataConns.set(conn.peer, conn);
 
     conn.on("open", () => {
-      sendProfileTo(conn.peer, true);
+      // Pass conn directly so the correct open channel is always used, regardless
+      // of whether activeDataConns has been overwritten by a simultaneous inbound
+      // connection from the same peer.
+      sendProfileTo(conn.peer, true, conn);
       // Share the current chat history so late joiners see all prior messages.
-      sendChatHistoryTo(conn.peer);
+      sendChatHistoryTo(conn.peer, conn);
     });
 
     conn.on("data", (data) => {
